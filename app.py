@@ -6,11 +6,9 @@ import os
 
 app = Flask(__name__)
 
-# ดึง URL ของฐานข้อมูลคลาวด์จาก Render
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    # ปรับแต่งการเชื่อมต่อให้รองรับ Direct Connection
     return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def init_db():
@@ -18,49 +16,25 @@ def init_db():
     try:
         conn = get_db_connection()
         c = conn.cursor()
-        
-        # สร้างตาราง features
         c.execute('''CREATE TABLE IF NOT EXISTS features
-                     (id SERIAL PRIMARY KEY,
-                      layer_name TEXT,
-                      properties TEXT,
-                      geojson TEXT)''')
-        
-        # สร้างตาราง layers
+                     (id SERIAL PRIMARY KEY, layer_name TEXT, properties TEXT, geojson TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS layers
-                     (id SERIAL PRIMARY KEY,
-                      name TEXT UNIQUE,
-                      color TEXT,
-                      type TEXT,
-                      fields TEXT)''')
-        
+                     (id SERIAL PRIMARY KEY, name TEXT UNIQUE, color TEXT, type TEXT, fields TEXT)''')
         conn.commit()
-        print("Database Tables Checked/Created Successfully")
     except Exception as e:
-        print(f"Error initializing database: {e}")
-        raise e
+        print(f"DB Init Error: {e}")
     finally:
-        if conn:
-            conn.close()
+        if conn: conn.close()
 
 if DATABASE_URL:
-    try:
-        init_db()
-    except:
-        pass
-
-@app.route('/fix-db')
-def fix_db():
-    try:
-        init_db()
-        return "<h1>สำเร็จ! ตารางถูกสร้างเรียบร้อยแล้ว</h1><a href='/'>กลับหน้าหลัก</a>"
-    except Exception as e:
-        return f"<h1>เกิดข้อผิดพลาด: {str(e)}</h1>"
+    try: init_db()
+    except: pass
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# --- API สำหรับจัดการชั้นข้อมูล (Layers) ---
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
     conn = get_db_connection()
@@ -69,32 +43,46 @@ def get_layers():
     rows = c.fetchall()
     c.close()
     conn.close()
-    layers = [{"id": r[0], "name": r[1], "color": r[2], "type": r[3], "fields": json.loads(r[4] if r[4] else '[]')} for r in rows]
-    return jsonify(layers)
+    return jsonify([{"id": r[0], "name": r[1], "color": r[2], "type": r[3], "fields": json.loads(r[4] if r[4] else '[]')} for r in rows])
 
 @app.route('/api/layers', methods=['POST'])
 def add_layer():
     data = request.json
-    conn = None
+    conn = get_db_connection()
+    c = conn.cursor()
     try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        clean_fields = [{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])]
-        fields_str = json.dumps(clean_fields)
+        fields_str = json.dumps([{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])])
         c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)", 
                   (data['name'], data['color'], data['type'], fields_str))
         conn.commit()
         return jsonify({"status": "success"})
     except errors.UniqueViolation:
-        if conn: conn.rollback()
+        conn.rollback()
         return jsonify({"status": "error_duplicate"})
+    finally:
+        c.close()
+        conn.close()
+
+# 🔥 เพิ่ม API สำหรับลบชั้นข้อมูล
+@app.route('/api/layers/<name>', methods=['DELETE'])
+def delete_layer(name):
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        # ลบพิกัดที่อยู่ในชั้นนี้ก่อน
+        c.execute("DELETE FROM features WHERE layer_name = %s", (name,))
+        # ลบชื่อชั้นข้อมูล
+        c.execute("DELETE FROM layers WHERE name = %s", (name,))
+        conn.commit()
+        return jsonify({"status": "success"})
     except Exception as e:
-        if conn: conn.rollback()
-        print(f"Post Layer Error: {e}")
+        conn.rollback()
         return jsonify({"status": "error", "message": str(e)})
     finally:
-        if conn: conn.close()
+        c.close()
+        conn.close()
 
+# --- API สำหรับจัดการพิกัด (Features) ---
 @app.route('/api/features', methods=['GET'])
 def get_features():
     conn = get_db_connection()
@@ -105,11 +93,11 @@ def get_features():
     conn.close()
     features = []
     for row in rows:
-        feature_data = json.loads(row[3])
-        feature_data['properties'] = json.loads(row[2]) if row[2] else {}
-        feature_data['properties']['id'] = row[0]
-        feature_data['properties']['layer_name'] = row[1]
-        features.append(feature_data)
+        f = json.loads(row[3])
+        f['properties'] = json.loads(row[2]) if row[2] else {}
+        f['properties']['id'] = row[0]
+        f['properties']['layer_name'] = row[1]
+        features.append(f)
     return jsonify({"type": "FeatureCollection", "features": features})
 
 @app.route('/api/features', methods=['POST'])
@@ -124,6 +112,17 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
+# 🔥 เพิ่ม API สำหรับลบพิกัดรายจุด
+@app.route('/api/features/<int:id>', methods=['DELETE'])
+def delete_feature(id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM features WHERE id = %s", (id,))
+    conn.commit()
+    c.close()
+    conn.close()
+    return jsonify({"status": "success"})
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port)
