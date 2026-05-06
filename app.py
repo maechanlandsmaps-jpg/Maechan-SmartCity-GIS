@@ -10,54 +10,57 @@ app = Flask(__name__)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    return psycopg2.connect(DATABASE_URL)
+    # ปรับแต่งการเชื่อมต่อให้รองรับ Direct Connection
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
-# ฟังก์ชันสร้างตาราง (ดิฉันปรับให้ตรวจสอบละเอียดขึ้น)
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    # สร้างตาราง features
-    c.execute('''CREATE TABLE IF NOT EXISTS features
-                 (id SERIAL PRIMARY KEY,
-                  layer_name TEXT,
-                  properties TEXT,
-                  geojson TEXT)''')
-    
-    # สร้างตาราง layers
-    c.execute('''CREATE TABLE IF NOT EXISTS layers
-                 (id SERIAL PRIMARY KEY,
-                  name TEXT UNIQUE,
-                  color TEXT,
-                  type TEXT,
-                  fields TEXT)''')
-    
-    conn.commit()
-    c.close()
-    conn.close()
-    print("Database Initialized Successfully")
+    conn = None
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        
+        # สร้างตาราง features
+        c.execute('''CREATE TABLE IF NOT EXISTS features
+                     (id SERIAL PRIMARY KEY,
+                      layer_name TEXT,
+                      properties TEXT,
+                      geojson TEXT)''')
+        
+        # สร้างตาราง layers
+        c.execute('''CREATE TABLE IF NOT EXISTS layers
+                     (id SERIAL PRIMARY KEY,
+                      name TEXT UNIQUE,
+                      color TEXT,
+                      type TEXT,
+                      fields TEXT)''')
+        
+        conn.commit()
+        print("Database Tables Checked/Created Successfully")
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        raise e
+    finally:
+        if conn:
+            conn.close()
 
-# เรียกใช้งานตอนเริ่มแอป
 if DATABASE_URL:
     try:
         init_db()
-    except Exception as e:
-        print("Initial DB Error:", e)
+    except:
+        pass
 
-# --- หน้าพิเศษสำหรับคุณนิดไว้ใช้เช็ก/ซ่อมตาราง ---
 @app.route('/fix-db')
 def fix_db():
     try:
         init_db()
-        return "<h1>สำเร็จ! ตารางถูกสร้าง/ตรวจสอบเรียบร้อยแล้ว</h1><p>คุณนิดลองกลับไปหน้าหลักแล้วกดสร้างชั้นข้อมูลใหม่ได้เลยครับ</p><a href='/'>กลับหน้าหลัก</a>"
+        return "<h1>สำเร็จ! ตารางถูกสร้างเรียบร้อยแล้ว</h1><a href='/'>กลับหน้าหลัก</a>"
     except Exception as e:
-        return f"<h1>เกิดข้อผิดพลาด</h1><p>{str(e)}</p>"
+        return f"<h1>เกิดข้อผิดพลาด: {str(e)}</h1>"
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# --- API อื่นๆ (เหมือนเดิม) ---
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
     conn = get_db_connection()
@@ -72,26 +75,25 @@ def get_layers():
 @app.route('/api/layers', methods=['POST'])
 def add_layer():
     data = request.json
-    conn = get_db_connection()
-    c = conn.cursor()
-    clean_fields = [{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])]
-    fields_str = json.dumps(clean_fields)
+    conn = None
     try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        clean_fields = [{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])]
+        fields_str = json.dumps(clean_fields)
         c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)", 
                   (data['name'], data['color'], data['type'], fields_str))
         conn.commit()
-        status = "success"
+        return jsonify({"status": "success"})
     except errors.UniqueViolation:
-        conn.rollback()
-        status = "error_duplicate"
+        if conn: conn.rollback()
+        return jsonify({"status": "error_duplicate"})
     except Exception as e:
-        conn.rollback()
-        print("Add Layer Error:", e)
-        status = "error"
+        if conn: conn.rollback()
+        print(f"Post Layer Error: {e}")
+        return jsonify({"status": "error", "message": str(e)})
     finally:
-        c.close()
-        conn.close()
-    return jsonify({"status": status})
+        if conn: conn.close()
 
 @app.route('/api/features', methods=['GET'])
 def get_features():
