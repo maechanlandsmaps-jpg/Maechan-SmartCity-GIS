@@ -6,11 +6,13 @@ import os
 
 app = Flask(__name__)
 
+# เชื่อมต่อกับ Supabase
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, sslmode='require')
 
+# ฟังก์ชันตรวจสอบและสร้างตาราง
 def init_db():
     conn = None
     try:
@@ -34,7 +36,8 @@ if DATABASE_URL:
 def index():
     return render_template('index.html')
 
-# --- API สำหรับจัดการชั้นข้อมูล (Layers) ---
+# --- ส่วนจัดการ LAYERS (ชั้นข้อมูล) ---
+
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
     conn = get_db_connection()
@@ -63,26 +66,27 @@ def add_layer():
         c.close()
         conn.close()
 
-# 🔥 เพิ่ม API สำหรับลบชั้นข้อมูล
+# ✅ ฟังก์ชันลบชั้นข้อมูล (ลบทั้งชั้นและพิกัดข้างใน)
 @app.route('/api/layers/<name>', methods=['DELETE'])
 def delete_layer(name):
-    conn = get_db_connection()
-    c = conn.cursor()
+    conn = None
     try:
-        # ลบพิกัดที่อยู่ในชั้นนี้ก่อน
+        conn = get_db_connection()
+        c = conn.cursor()
+        # 1. ลบพิกัดทั้งหมดที่ผูกกับชั้นนี้
         c.execute("DELETE FROM features WHERE layer_name = %s", (name,))
-        # ลบชื่อชั้นข้อมูล
+        # 2. ลบชื่อชั้นข้อมูล
         c.execute("DELETE FROM layers WHERE name = %s", (name,))
         conn.commit()
         return jsonify({"status": "success"})
     except Exception as e:
-        conn.rollback()
+        if conn: conn.rollback()
         return jsonify({"status": "error", "message": str(e)})
     finally:
-        c.close()
-        conn.close()
+        if conn: conn.close()
 
-# --- API สำหรับจัดการพิกัด (Features) ---
+# --- ส่วนจัดการ FEATURES (พิกัดบนแผนที่) ---
+
 @app.route('/api/features', methods=['GET'])
 def get_features():
     conn = get_db_connection()
@@ -112,7 +116,7 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
-# 🔥 เพิ่ม API สำหรับลบพิกัดรายจุด
+# ✅ ฟังก์ชันลบพิกัดรายจุด
 @app.route('/api/features/<int:id>', methods=['DELETE'])
 def delete_feature(id):
     conn = get_db_connection()
