@@ -52,7 +52,6 @@ def add_layer():
     data = request.json
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # ดึงเอาเฉพาะ name กับ type ตอนสร้างใหม่ (old_name ยังไม่มี)
     clean_fields = [{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])]
     fields_str = json.dumps(clean_fields)
     try:
@@ -77,7 +76,6 @@ def edit_layer(layer_id):
     new_layer_name = data['name']
     new_fields = data.get('fields', [])
     
-    # 1. จัดการข้อมูลโครงสร้าง Layer (ลบ old_name ออกเพื่อไม่ให้รกฐานข้อมูล)
     clean_fields = [{"name": f["name"], "type": f["type"]} for f in new_fields]
     fields_str = json.dumps(clean_fields)
 
@@ -85,7 +83,6 @@ def edit_layer(layer_id):
         c.execute("UPDATE layers SET name=?, color=?, type=?, fields=? WHERE id=?", 
                   (new_layer_name, data['color'], data['type'], fields_str, layer_id))
         
-        # 2. ตรวจสอบว่ามีการเปลี่ยนชื่อฟิลด์บ้างไหม? (Mapping old_key -> new_key)
         field_mapping = {}
         for f in new_fields:
             old_k = f.get('old_name')
@@ -93,13 +90,11 @@ def edit_layer(layer_id):
             if old_k and new_k and old_k != new_k:
                 field_mapping[old_k] = new_k
 
-        # 3. อัปเดตตาราง Features (พิกัด) ทั้งหมดใน Layer นี้ ให้สอดคล้องกัน
         if old_layer_name != new_layer_name or len(field_mapping) > 0:
             c.execute("SELECT id, properties, geojson FROM features WHERE layer_name=?", (old_layer_name,))
             layer_features = c.fetchall()
 
             for feat_id, props_str, geojson_str in layer_features:
-                # แปลงคุณสมบัติ (Properties) เดิม
                 try:
                     props = json.loads(props_str) if props_str else {}
                 except:
@@ -108,11 +103,10 @@ def edit_layer(layer_id):
                 new_props = {}
                 for k, v in props.items():
                     if k in field_mapping:
-                        new_props[field_mapping[k]] = v # ถ้าเปลี่ยนชื่อ ให้ใช้คีย์ใหม่แทน
+                        new_props[field_mapping[k]] = v 
                     else:
                         new_props[k] = v
 
-                # แปลง GeoJSON ที่ซ้อนอยู่ด้านในด้วย
                 try:
                     geo_obj = json.loads(geojson_str) if geojson_str else {}
                     if 'properties' in geo_obj:
@@ -127,7 +121,6 @@ def edit_layer(layer_id):
                 except:
                     pass
 
-                # เซฟกลับลงฐานข้อมูล
                 c.execute("UPDATE features SET layer_name=?, properties=?, geojson=? WHERE id=?", 
                           (new_layer_name, json.dumps(new_props), geojson_str, feat_id))
 
