@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart City GIS | เทศบาลตำบลแม่จัน</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -32,11 +32,11 @@
         input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
 
         #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
-        #attribute-panel.open { height: 35vh; border-top: 4px solid #1e293b; }
+        #attribute-panel.open { height: 45vh; border-top: 4px solid #1e293b; } /* ปรับความสูงตารางให้ใช้ในมือถือได้ดีขึ้น */
         .table-container { flex: 1; overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
         th { position: sticky; top: 0; background: #f8fafc; z-index: 1; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-        td { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+        td { white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
         
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -44,24 +44,31 @@
 </head>
 <body class="flex h-screen bg-slate-100 relative">
 
-    <aside class="w-80 bg-slate-900 text-white flex flex-col shadow-2xl z-20 relative shrink-0">
-        <div class="p-6 border-b border-slate-800">
-            <h1 class="text-xl font-bold text-emerald-400 flex items-center gap-3">
-                <i class="fa-solid fa-map-location-dot"></i> Maechan GIS
-            </h1>
-            <p class="text-xs text-slate-400 mt-1">Smart City Data Platform</p>
+    <div id="mobile-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] hidden md:hidden opacity-0 transition-opacity duration-300"></div>
+
+    <aside id="sidebar" class="w-80 bg-slate-900 text-white flex flex-col shadow-2xl z-[60] fixed md:relative h-full shrink-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
+        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+            <div>
+                <h1 class="text-xl font-bold text-emerald-400 flex items-center gap-3">
+                    <i class="fa-solid fa-map-location-dot"></i> Maechan GIS
+                </h1>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">Smart City Data Platform</p>
+            </div>
+            <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white p-1">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
         </div>
         
         <div class="flex-1 p-4 flex flex-col overflow-hidden">
-            <div class="flex flex-col gap-2 mb-4">
+            <div class="flex flex-col gap-3 mb-4">
                 <div class="flex justify-between items-center mb-1">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">ชั้นข้อมูล (Layers)</h2>
-                    <button onclick="openAddLayerModal()" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded-md transition font-bold shadow-md">
+                    <button onclick="openAddLayerModal()" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1.5 rounded-md transition font-bold shadow-md">
                         <i class="fa-solid fa-plus"></i> เพิ่ม
                     </button>
                 </div>
                 <div class="flex gap-1 justify-between items-center">
-                    <select id="bufferRadiusSelect" class="text-[10px] bg-slate-800 text-white border border-slate-700 rounded px-1 py-1.5 outline-none focus:border-purple-500 w-16 text-center">
+                    <select id="bufferRadiusSelect" class="text-[10px] bg-slate-800 text-white border border-slate-700 rounded px-1 py-2 outline-none focus:border-purple-500 w-16 text-center">
                         <option value="50">50m</option>
                         <option value="100">100m</option>
                         <option value="200">200m</option>
@@ -69,10 +76,10 @@
                         <option value="400">400m</option>
                         <option value="500">500m</option>
                     </select>
-                    <button onclick="drawCombinedAnalysis()" class="flex-1 text-[10px] bg-purple-500 hover:bg-purple-600 text-white px-1.5 py-1.5 rounded transition font-bold shadow-md" title="วิเคราะห์พื้นที่ให้บริการ (ฮีทแมพ + วงแหวน)">
+                    <button onclick="drawCombinedAnalysis()" class="flex-1 text-[10px] bg-purple-500 hover:bg-purple-600 text-white px-1 py-2 rounded transition font-bold shadow-md" title="วิเคราะห์พื้นที่ให้บริการ (ฮีทแมพ + วงแหวน)">
                         <i class="fa-solid fa-bullseye"></i> วิเคราะห์รัศมี
                     </button>
-                    <button onclick="clearBufferArea()" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded transition font-bold" title="ล้างการวิเคราะห์ทั้งหมด">
+                    <button onclick="clearBufferArea()" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-2 rounded transition font-bold">
                         <i class="fa-solid fa-eraser"></i> ล้าง
                     </button>
                 </div>
@@ -82,34 +89,39 @@
                 <div class="text-center text-slate-500 text-sm mt-10"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูล...</div>
             </div>
             
-            <p class="text-[10px] text-slate-400 mt-4 leading-relaxed shrink-0"><i class="fa-solid fa-circle-info text-blue-400"></i> เลือกชั้นข้อมูล เลือกระยะทาง แล้วกดวิเคราะห์รัศมี</p>
+            <p class="text-[10px] text-slate-400 mt-4 leading-relaxed shrink-0 text-center"><i class="fa-solid fa-circle-info text-blue-400"></i> เลือกระยะและกดวิเคราะห์รัศมี</p>
         </div>
 
-        <div class="p-4 border-t border-slate-800 bg-slate-800/30">
+        <div class="p-4 border-t border-slate-800 bg-slate-800/50">
             <div class="flex gap-2">
-                <button onclick="exportGeoJSON()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-blue-400 text-[10px] font-bold py-2.5 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-download mr-1"></i> ส่งออก</button>
-                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[10px] font-bold py-2.5 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> นำเข้า</button>
+                <button onclick="exportGeoJSON()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-download mr-1"></i> ส่งออก</button>
+                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> นำเข้า</button>
                 <input type="file" id="importFile" accept=".geojson,.json,.kml,.kmz,.zip" class="hidden" onchange="importFileHandler(event)">
             </div>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col relative z-10">
+    <main class="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
+        
+        <button onclick="toggleSidebar()" class="md:hidden absolute top-4 right-4 z-[40] bg-white text-slate-800 w-10 h-10 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+
         <div id="map"></div>
 
-        <div id="attribute-panel" class="bg-white z-30 shadow-2xl">
+        <div id="attribute-panel" class="bg-white z-30 shadow-2xl flex flex-col">
             <div class="p-3 flex justify-between items-center border-b bg-slate-50 shrink-0">
-                <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm"><i class="fa-solid fa-table text-blue-500"></i> ตารางข้อมูล: <span id="current-table-layer" class="text-blue-600">-</span></h3>
-                <div class="flex items-center gap-4">
-                    <div class="relative">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm max-w-[50%] truncate"><i class="fa-solid fa-table text-blue-500"></i> <span id="current-table-layer" class="text-blue-600 truncate">-</span></h3>
+                <div class="flex items-center gap-3">
+                    <div class="relative hidden sm:block">
                         <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input type="text" id="table-search" placeholder="ค้นหาในตาราง..." class="text-xs border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-blue-500 w-64 bg-white" onkeyup="filterTable()">
+                        <input type="text" id="table-search" placeholder="ค้นหา..." class="text-xs border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-blue-500 w-40 bg-white" onkeyup="filterTable()">
                     </div>
-                    <button onclick="closeTable()" class="text-slate-400 hover:text-red-500 transition"><i class="fa-solid fa-xmark text-lg"></i></button>
+                    <button onclick="closeTable()" class="text-slate-400 hover:text-red-500 transition p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
                 </div>
             </div>
             <div class="table-container p-0">
-                <table id="attribute-table" class="text-sm text-left w-full">
+                <table id="attribute-table" class="text-xs md:text-sm text-left w-full">
                     <thead id="table-head"></thead>
                     <tbody id="table-body"></tbody>
                 </table>
@@ -118,7 +130,7 @@
     </main>
 
     <div id="layerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[90vh] overflow-y-auto" id="layerModalContent">
+        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[90vh] overflow-y-auto m-4" id="layerModalContent">
             <div class="flex justify-between items-center mb-5">
                 <h2 class="text-lg font-bold text-slate-800" id="layerModalTitle"><i class="fa-solid fa-layer-group text-emerald-500 mr-2"></i> สร้างชั้นข้อมูลใหม่</h2>
                 <button type="button" onclick="toggleModal('layerModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -149,7 +161,7 @@
     </div>
 
     <div id="analyticsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform scale-95 transition-transform duration-300" id="analyticsModalContent">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform scale-95 transition-transform duration-300 m-4" id="analyticsModalContent">
             <div class="flex justify-between items-center mb-5 border-b pb-3">
                 <div>
                     <h2 class="text-lg font-bold text-slate-800" id="analyticsTitle"><i class="fa-solid fa-chart-pie text-purple-500 mr-2"></i> สรุปข้อมูล</h2>
@@ -171,8 +183,8 @@
 
             <div class="bg-slate-50 rounded-xl border border-slate-100 p-4">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xs font-bold text-slate-500" id="chartLabel">วิเคราะห์สัดส่วนข้อมูลตาม:</h3>
-                    <select id="analyticsFieldSelect" class="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-purple-500 bg-white" onchange="updateAnalyticsChart()"></select>
+                    <h3 class="text-[10px] md:text-xs font-bold text-slate-500" id="chartLabel">สัดส่วนข้อมูลตาม:</h3>
+                    <select id="analyticsFieldSelect" class="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-purple-500 bg-white max-w-[120px]" onchange="updateAnalyticsChart()"></select>
                 </div>
                 <div class="h-48 relative flex justify-center">
                     <canvas id="layerAnalyticsChart"></canvas>
@@ -182,7 +194,7 @@
     </div>
 
     <div id="loadingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] hidden flex items-center justify-center transition-opacity duration-300">
-        <div class="bg-white rounded-xl p-6 flex flex-col items-center shadow-2xl">
+        <div class="bg-white rounded-xl p-6 flex flex-col items-center shadow-2xl m-4 text-center">
             <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
             <p class="font-bold text-slate-700" id="loadingText">กำลังอ่านไฟล์แผนที่...</p>
             <p class="text-xs text-slate-500 mt-1">โปรดรอสักครู่ ระบบกำลังจัดกลุ่มข้อมูลและสกัดฟิลด์</p>
@@ -190,13 +202,51 @@
     </div>
 
     <script>
+        // ระบบเปิด/ปิด แถบเมนูด้านซ้าย สำหรับหน้าจอมือถือ
+        window.toggleSidebar = function() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            if (sidebar.classList.contains('-translate-x-full')) {
+                // เปิดเมนู
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+            } else {
+                // ปิดเมนู
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        };
+
+        // ฟังก์ชันช่วยปิดเมนูอัตโนมัติเมื่อกดทำงานบนมือถือ (ให้เห็นแผนที่เต็มๆ)
+        function autoCloseSidebarOnMobile() {
+            if (window.innerWidth < 768) {
+                const sidebar = document.getElementById('sidebar');
+                if (!sidebar.classList.contains('-translate-x-full')) {
+                    toggleSidebar();
+                }
+            }
+        }
+
         Chart.defaults.font.family = 'Prompt';
+
+        // เลื่อนปุ่มควบคุมแผนที่ (Zoom) ของ Leaflet ลงมานิดนึงเพื่อหลบ Hamburger Menu
+        const map = L.map('map', { 
+            center: [20.1525, 99.8475], 
+            zoom: 15, 
+            zoomControl: false // ปิดตัวเดิมก่อน
+        });
+        
+        // ย้ายปุ่มซูมไปไว้มุมขวาล่าง หรือซ้ายบนแต่เว้นระยะ
+        L.control.zoom({ position: 'topleft' }).addTo(map);
 
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
         const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
-
-        const map = L.map('map', { center: [20.1525, 99.8475], zoom: 15, layers: [osmLayer] });
-        L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Satellite)": satelliteLayer }).addTo(map);
+        
+        osmLayer.addTo(map);
+        L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Satellite)": satelliteLayer }, null, {position: 'bottomright'}).addTo(map);
 
         map.pm.setLang('th');
         map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false, drawPolygon: true, drawRectangle: true });
@@ -207,7 +257,6 @@
         let analyticsChartInstance = null;
         let currentAnalyticsLayer = ''; 
 
-        // กลุ่มสำหรับเก็บกราฟฟิกการวิเคราะห์ (Buffer + Heatmap)
         let bufferGroup = L.layerGroup().addTo(map);
 
         function formatDistance(meters) {
@@ -254,14 +303,14 @@
                         <label class="block relative cursor-pointer group">
                             <input type="radio" name="active_layer" value="${layer.name}" class="layer-selector sr-only" ${isChecked}>
                             <div class="flex items-center justify-between p-3 bg-slate-800 border-2 border-transparent rounded-xl transition group-hover:bg-slate-700 pr-1">
-                                <div class="flex items-center gap-3">
+                                <div class="flex items-center gap-2 md:gap-3">
                                     <input type="checkbox" checked class="w-4 h-4 accent-emerald-500 layer-toggle" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
-                                    <span class="text-sm font-medium flex items-center gap-2 w-28 overflow-hidden text-ellipsis whitespace-nowrap" title="${layer.name}">${iconHtml} ${layer.name}</span>
+                                    <span class="text-xs md:text-sm font-medium flex items-center gap-2 w-24 md:w-28 overflow-hidden text-ellipsis whitespace-nowrap" title="${layer.name}">${iconHtml} ${layer.name}</span>
                                 </div>
                                 <div class="flex gap-1">
-                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLayerDashboard('${layer.name}')" class="p-2 text-slate-500 hover:text-purple-400 transition" title="แดชบอร์ดวิเคราะห์"><i class="fa-solid fa-chart-pie text-xs"></i></button>
-                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openTable('${layer.name}')" class="p-2 text-slate-500 hover:text-blue-400 transition" title="เปิดตารางข้อมูล"><i class="fa-solid fa-table-list text-xs"></i></button>
-                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openEditLayerModal(${layer.id})" class="p-2 text-slate-500 hover:text-emerald-400 transition" title="แก้ไขชั้นข้อมูล"><i class="fa-solid fa-pen text-xs"></i></button>
+                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLayerDashboard('${layer.name}')" class="p-1.5 md:p-2 text-slate-500 hover:text-purple-400 transition" title="แดชบอร์ดวิเคราะห์"><i class="fa-solid fa-chart-pie text-xs"></i></button>
+                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openTable('${layer.name}')" class="p-1.5 md:p-2 text-slate-500 hover:text-blue-400 transition" title="เปิดตารางข้อมูล"><i class="fa-solid fa-table-list text-xs"></i></button>
+                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openEditLayerModal(${layer.id})" class="p-1.5 md:p-2 text-slate-500 hover:text-emerald-400 transition" title="แก้ไขชั้นข้อมูล"><i class="fa-solid fa-pen text-xs"></i></button>
                                 </div>
                             </div>
                         </label>
@@ -346,6 +395,7 @@
 
         // --- ระบบวิเคราะห์รัศมี (วาด Heatmap ก่อน แล้ววาดเส้นวงแหวนทับแบบโปร่งแสง) ---
         window.drawCombinedAnalysis = function() {
+            autoCloseSidebarOnMobile(); // ปิดเมนูเพื่อดูแผนที่เต็มจอ
             bufferGroup.clearLayers(); 
             let pointCount = 0;
             
@@ -370,7 +420,6 @@
                     const layerInfo = appLayers.find(l => l.name === activeLayerName);
                     const color = layerInfo ? layerInfo.color : '#a855f7'; 
                     
-                    // 1. วาดวงแหวน (เส้นบางๆ โปร่งแสงมาก ไม่ให้รก)
                     const circle = L.circle([lat, lng], {
                         radius: selectedRadius,
                         color: color,
@@ -382,15 +431,12 @@
                     });
                     
                     bufferGroup.addLayer(circle);
-
-                    // 2. เก็บพิกัดไว้ทำ Heatmap
                     heatPoints.push([lat, lng, 1]);
                     pointCount++;
                 }
             });
 
             if (pointCount > 0) {
-                // 3. วาด Heatmap ซ้อนไว้ชั้นล่าง
                 let heatLayer = L.heatLayer(heatPoints, {
                     radius: pixelRadius,
                     blur: pixelRadius - 10,
@@ -398,14 +444,12 @@
                     gradient: {0.4: '#3b82f6', 0.6: '#10b981', 0.8: '#eab308', 1.0: '#ef4444'} 
                 });
                 bufferGroup.addLayer(heatLayer);
-
-                map.flyToBounds(bufferGroup.getBounds(), {padding: [50, 50], duration: 0.8});
+                map.flyToBounds(bufferGroup.getBounds(), {padding: [30, 30], duration: 0.8});
             } else {
                 alert(`ไม่พบข้อมูลแบบ 'จุด (Marker)' ในชั้นข้อมูล [${activeLayerName}] เพื่อสร้างการวิเคราะห์ครับ`);
             }
         };
 
-        // --- วิเคราะห์รัศมีเฉพาะจุด (50m-500m) ---
         window.drawBufferArea = function(lat, lng) {
             bufferGroup.clearLayers();
             const radii = [500, 400, 300, 200, 100, 50];
@@ -424,14 +468,16 @@
                 bufferGroup.addLayer(circle);
             });
             map.closePopup();
-            map.flyToBounds(bufferGroup.getBounds(), {padding: [50, 50], duration: 0.5});
+            map.flyToBounds(bufferGroup.getBounds(), {padding: [30, 30], duration: 0.5});
         };
 
         window.clearBufferArea = function() {
             bufferGroup.clearLayers();
+            autoCloseSidebarOnMobile();
         };
 
         window.openLayerDashboard = function(layerName) {
+            autoCloseSidebarOnMobile();
             const layerInfo = appLayers.find(l => l.name === layerName);
             if(!layerInfo) return;
 
@@ -451,19 +497,19 @@
                 let totalMeters = 0;
                 featuresInLayer.forEach(f => { if(f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') totalMeters += turf.length(f, {units: 'meters'}); });
                 geoValue.innerText = formatDistance(totalMeters);
-                geoValue.className = "text-xl font-bold text-blue-500";
+                geoValue.className = "text-lg md:text-xl font-bold text-blue-500";
             } else if (layerInfo.type === 'Point') {
                 geoBox.classList.remove('hidden');
                 geoLabel.innerText = "สถานะ";
                 geoValue.innerText = "จุดพิกัด (Marker)";
-                geoValue.className = "text-xl font-bold text-slate-400";
+                geoValue.className = "text-lg md:text-xl font-bold text-slate-400";
             } else {
                 geoBox.classList.remove('hidden');
                 geoLabel.innerText = "พื้นที่รวมทั้งหมด";
                 let totalSqm = 0;
                 featuresInLayer.forEach(f => { if(f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') totalSqm += turf.area(f); });
                 geoValue.innerText = formatArea(totalSqm);
-                geoValue.className = "text-xl font-bold text-emerald-500";
+                geoValue.className = "text-lg md:text-xl font-bold text-emerald-500";
             }
 
             const select = document.getElementById('analyticsFieldSelect');
@@ -528,6 +574,7 @@
         }
 
         function openTable(layerName) {
+            autoCloseSidebarOnMobile();
             const panel = document.getElementById('attribute-panel');
             const mapEl = document.getElementById('map');
             const layerInfo = appLayers.find(l => l.name === layerName);
@@ -536,9 +583,9 @@
             document.getElementById('current-table-layer').innerText = layerName;
             
             const head = document.getElementById('table-head');
-            let headHtml = '<tr><th class="p-3 px-4 border-r w-16 text-center text-xs text-slate-500">ID</th>';
-            if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 px-4 border-r text-xs text-slate-700">${f.name}</th>`); }
-            headHtml += '<th class="p-3 px-4 border-r w-24 text-center text-xs text-slate-500">จัดการ</th></tr>';
+            let headHtml = '<tr><th class="p-3 px-4 border-r w-12 md:w-16 text-center text-[10px] md:text-xs text-slate-500">ID</th>';
+            if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 px-4 border-r text-[10px] md:text-xs text-slate-700">${f.name}</th>`); }
+            headHtml += '<th class="p-3 px-4 border-r w-20 md:w-24 text-center text-[10px] md:text-xs text-slate-500">จัดการ</th></tr>';
             head.innerHTML = headHtml;
 
             const body = document.getElementById('table-body');
@@ -547,12 +594,12 @@
             
             featuresInLayer.forEach(f => {
                 bodyHtml += `<tr class="hover:bg-blue-50/50 cursor-pointer border-b transition">`;
-                bodyHtml += `<td class="p-2 px-4 border-r text-center font-mono text-xs text-slate-400" onclick="zoomToFeature(${f.properties.id})">${f.properties.id}</td>`;
+                bodyHtml += `<td class="p-2 px-4 border-r text-center font-mono text-[10px] md:text-xs text-slate-400" onclick="zoomToFeature(${f.properties.id})">${f.properties.id}</td>`;
                 
                 if (layerInfo.fields) {
                     layerInfo.fields.forEach(field => {
                         const val = f.properties[field.name] || '-';
-                        bodyHtml += `<td class="p-2 px-4 border-r text-sm text-slate-700" onclick="zoomToFeature(${f.properties.id})">${val}</td>`;
+                        bodyHtml += `<td class="p-2 px-4 border-r text-xs md:text-sm text-slate-700" onclick="zoomToFeature(${f.properties.id})">${val}</td>`;
                     });
                 }
                 
@@ -560,14 +607,32 @@
             });
             
             const colCount = layerInfo.fields ? layerInfo.fields.length + 2 : 2;
-            body.innerHTML = bodyHtml || `<tr><td colspan="${colCount}" class="p-8 text-center text-slate-400 text-sm bg-slate-50"><i class="fa-solid fa-folder-open mb-2 text-2xl text-slate-300 block"></i>ไม่มีข้อมูลในชั้นข้อมูลนี้</td></tr>`;
+            body.innerHTML = bodyHtml || `<tr><td colspan="${colCount}" class="p-8 text-center text-slate-400 text-xs md:text-sm bg-slate-50"><i class="fa-solid fa-folder-open mb-2 text-2xl text-slate-300 block"></i>ไม่มีข้อมูลในชั้นข้อมูลนี้</td></tr>`;
 
-            panel.classList.add('open'); mapEl.style.height = '65vh'; setTimeout(() => map.invalidateSize(), 300);
+            panel.classList.add('open'); 
+            // ลดความสูงแผนที่ลงเพื่อให้ตารางโผล่มา
+            if(window.innerWidth < 768) { mapEl.style.height = '55vh'; } else { mapEl.style.height = '65vh'; }
+            setTimeout(() => map.invalidateSize(), 300);
         }
 
         function closeTable() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); }
         function filterTable() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } }
-        function zoomToFeature(id) { Object.values(layerGroups).forEach(group => { group.eachLayer(layer => { if (layer.feature && layer.feature.properties.id === id) { const bounds = layer.getBounds ? layer.getBounds().getCenter() : layer.getLatLng(); map.flyTo(bounds, 18, { duration: 0.5 }); setTimeout(() => layer.openPopup(), 500); } }); }); }
+        
+        function zoomToFeature(id) { 
+            Object.values(layerGroups).forEach(group => { 
+                group.eachLayer(layer => { 
+                    if (layer.feature && layer.feature.properties.id === id) { 
+                        const bounds = layer.getBounds ? layer.getBounds().getCenter() : layer.getLatLng(); 
+                        map.flyTo(bounds, 18, { duration: 0.5 }); 
+                        
+                        // ถ้ารันบนมือถือ ให้ปิดตารางลงไปก่อนเพื่อให้เห็นแผนที่ชัดๆ
+                        if(window.innerWidth < 768) { closeTable(); }
+                        
+                        setTimeout(() => layer.openPopup(), 500); 
+                    } 
+                }); 
+            }); 
+        }
 
         let currentDrawLayer = null;
         map.on('pm:create', (e) => {
@@ -588,10 +653,7 @@
             if(layerInfo && layerInfo.fields && layerInfo.fields.length > 0) {
                 layerInfo.fields.forEach(f => {
                     let inputType = f.type === 'Number' ? 'number' : (f.type === 'Date' ? 'date' : 'text');
-                    
-                    // ป้องกัน old_name ทิ้งค่าไว้ในกรณีสร้างข้อมูลใหม่
                     const oldNameAttr = `data-oldname="${f.name}"`;
-                    
                     if (f.name === 'รายละเอียด' && f.type === 'Text') customInputHtml += `<div class="mb-3"><label class="block text-xs font-bold text-slate-600 mb-1">${f.name}</label><textarea data-fieldname="${f.name}" ${oldNameAttr} rows="2" class="custom-field-input w-full border border-slate-200 rounded p-1.5 text-sm outline-none focus:border-blue-500 resize-none"></textarea></div>`;
                     else customInputHtml += `<div class="mb-3"><label class="block text-xs font-bold text-slate-600 mb-1">${f.name}</label><input type="${inputType}" data-fieldname="${f.name}" ${oldNameAttr} class="custom-field-input w-full border border-slate-200 rounded p-1.5 text-sm outline-none focus:border-blue-500"></div>`;
                 });
@@ -611,7 +673,19 @@
         window.deleteFeature = function(id) { if(confirm("ต้องการลบพิกัดนี้ใช่หรือไม่?")) { fetch(`/api/features/${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if(data.status === "success") fetchFeatures(); }); } };
         window.toggleLayerVisibility = function(checkbox) { const layerName = checkbox.getAttribute('data-layer'); if(checkbox.checked) map.addLayer(layerGroups[layerName]); else map.removeLayer(layerGroups[layerName]); };
         function toggleModal(modalID) { const modal = document.getElementById(modalID); const content = document.getElementById(modalID + 'Content'); if (modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10); } else { modal.classList.add('opacity-0'); content.classList.add('scale-95'); setTimeout(() => { modal.classList.add('hidden'); }, 300); } }
-        window.openAddLayerModal = function() { document.getElementById('current_edit_layer_id').value = ''; document.getElementById('layerModalTitle').innerHTML = '<i class="fa-solid fa-layer-group text-emerald-500 mr-2"></i> สร้างชั้นข้อมูลใหม่'; document.getElementById('new_layer_name').value = ''; document.getElementById('new_layer_color').value = '#10b981'; document.getElementById('new_layer_type').value = 'Point'; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ', 'Text'); addFieldRow('รายละเอียด', 'Text'); document.getElementById('btnSaveLayer').innerHTML = 'บันทึกชั้นข้อมูลใหม่'; document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
+        
+        window.openAddLayerModal = function() { 
+            document.getElementById('current_edit_layer_id').value = ''; 
+            document.getElementById('layerModalTitle').innerHTML = '<i class="fa-solid fa-layer-group text-emerald-500 mr-2"></i> สร้างชั้นข้อมูลใหม่'; 
+            document.getElementById('new_layer_name').value = ''; 
+            document.getElementById('new_layer_color').value = '#10b981'; 
+            document.getElementById('new_layer_type').value = 'Point'; 
+            document.getElementById('fields_container').innerHTML = ''; 
+            addFieldRow('ชื่อ', 'Text'); addFieldRow('รายละเอียด', 'Text'); 
+            document.getElementById('btnSaveLayer').innerHTML = 'บันทึกชั้นข้อมูลใหม่'; 
+            document.getElementById('btnDeleteLayer').classList.add('hidden'); 
+            toggleModal('layerModal'); 
+        }
         
         window.openEditLayerModal = function(id) { 
             const layer = appLayers.find(l => l.id === id); 
@@ -622,18 +696,12 @@
             document.getElementById('new_layer_color').value = layer.color; 
             document.getElementById('new_layer_type').value = layer.type; 
             document.getElementById('fields_container').innerHTML = ''; 
-            
-            if(layer.fields) { 
-                // ส่งชื่อเดิมไปด้วยเพื่อใช้เทียบในการลบข้อมูล
-                layer.fields.forEach(f => addFieldRow(f.name, f.type, f.name)); 
-            } 
-            
+            if(layer.fields) { layer.fields.forEach(f => addFieldRow(f.name, f.type, f.name)); } 
             document.getElementById('btnSaveLayer').innerHTML = 'บันทึกการแก้ไข'; 
             document.getElementById('btnDeleteLayer').classList.remove('hidden'); 
             toggleModal('layerModal'); 
         }
 
-        // ฟังก์ชัน addFieldRow ปรับให้รับค่า originalName มาด้วย
         function addFieldRow(defaultName = '', defaultType = 'Text', originalName = '') { 
             const container = document.getElementById('fields_container'); 
             const row = document.createElement('div'); 
@@ -641,8 +709,6 @@
             const selectedText = defaultType === 'Text' ? 'selected' : ''; 
             const selectedNum = defaultType === 'Number' ? 'selected' : ''; 
             const selectedDate = defaultType === 'Date' ? 'selected' : ''; 
-            
-            // แอบแนบ data-oldname ไว้ที่ input
             row.innerHTML = `<input type="text" placeholder="ชื่อฟิลด์" value="${defaultName}" data-oldname="${originalName}" required class="field-name-input flex-1 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border border-slate-200 rounded px-2 py-1 text-xs outline-none bg-white focus:border-emerald-500"><option value="Text" ${selectedText}>ข้อความ</option><option value="Number" ${selectedNum}>ตัวเลข</option><option value="Date" ${selectedDate}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 px-1"><i class="fa-solid fa-trash"></i></button>`; 
             container.appendChild(row); 
         }
@@ -656,10 +722,8 @@
             const fieldsData = []; 
             const fieldNames = document.querySelectorAll('.field-name-input'); 
             const fieldTypes = document.querySelectorAll('.field-type-input'); 
-            
             for(let i = 0; i < fieldNames.length; i++) { 
                 if(fieldNames[i].value.trim() !== '') { 
-                    // ส่ง old_name ไปด้วยให้ฝั่ง Python แปลงชื่อ Key ในข้อมูลพิกัดทั้งหมด
                     fieldsData.push({ 
                         name: fieldNames[i].value.trim(), 
                         old_name: fieldNames[i].getAttribute('data-oldname') || '',
@@ -667,7 +731,6 @@
                     }); 
                 } 
             } 
-            
             fetch(id ? `/api/layers/${id}` : '/api/layers', { 
                 method: id ? 'PUT' : 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
