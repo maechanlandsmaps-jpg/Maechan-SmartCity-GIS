@@ -32,7 +32,7 @@
         input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
 
         #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
-        #attribute-panel.open { height: 45vh; border-top: 4px solid #1e293b; } /* ปรับความสูงตารางให้ใช้ในมือถือได้ดีขึ้น */
+        #attribute-panel.open { height: 45vh; border-top: 4px solid #1e293b; } 
         .table-container { flex: 1; overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
         th { position: sticky; top: 0; background: #f8fafc; z-index: 1; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
@@ -202,44 +202,34 @@
     </div>
 
     <script>
-        // ระบบเปิด/ปิด แถบเมนูด้านซ้าย สำหรับหน้าจอมือถือ
+        // --- 1. ระบบความจำ (localStorage) สำหรับจดจำสถานะ Layer ข้ามการ Refresh ---
+        let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
+        let activeLayerState = localStorage.getItem('maechanActiveLayer');
+
         window.toggleSidebar = function() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('mobile-overlay');
-            
             if (sidebar.classList.contains('-translate-x-full')) {
-                // เปิดเมนู
                 sidebar.classList.remove('-translate-x-full');
                 overlay.classList.remove('hidden');
                 setTimeout(() => overlay.classList.remove('opacity-0'), 10);
             } else {
-                // ปิดเมนู
                 sidebar.classList.add('-translate-x-full');
                 overlay.classList.add('opacity-0');
                 setTimeout(() => overlay.classList.add('hidden'), 300);
             }
         };
 
-        // ฟังก์ชันช่วยปิดเมนูอัตโนมัติเมื่อกดทำงานบนมือถือ (ให้เห็นแผนที่เต็มๆ)
         function autoCloseSidebarOnMobile() {
             if (window.innerWidth < 768) {
                 const sidebar = document.getElementById('sidebar');
-                if (!sidebar.classList.contains('-translate-x-full')) {
-                    toggleSidebar();
-                }
+                if (!sidebar.classList.contains('-translate-x-full')) { toggleSidebar(); }
             }
         }
 
         Chart.defaults.font.family = 'Prompt';
 
-        // เลื่อนปุ่มควบคุมแผนที่ (Zoom) ของ Leaflet ลงมานิดนึงเพื่อหลบ Hamburger Menu
-        const map = L.map('map', { 
-            center: [20.1525, 99.8475], 
-            zoom: 15, 
-            zoomControl: false // ปิดตัวเดิมก่อน
-        });
-        
-        // ย้ายปุ่มซูมไปไว้มุมขวาล่าง หรือซ้ายบนแต่เว้นระยะ
+        const map = L.map('map', { center: [20.1525, 99.8475], zoom: 15, zoomControl: false });
         L.control.zoom({ position: 'topleft' }).addTo(map);
 
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
@@ -256,7 +246,6 @@
         let allFeatures = [];
         let analyticsChartInstance = null;
         let currentAnalyticsLayer = ''; 
-
         let bufferGroup = L.layerGroup().addTo(map);
 
         function formatDistance(meters) {
@@ -295,16 +284,33 @@
                 const container = document.getElementById('layer-container');
                 container.innerHTML = ''; 
                 layers.forEach((layer, index) => {
-                    if (!layerGroups[layer.name]) { layerGroups[layer.name] = L.featureGroup().addTo(map); }
+                    if (!layerGroups[layer.name]) { layerGroups[layer.name] = L.featureGroup(); }
+                    
                     const iconHtml = layer.type === 'Point' ? `<i class="fa-solid fa-location-dot" style="color: ${layer.color}"></i>` : `<i class="fa-solid fa-route" style="color: ${layer.color}"></i>`;
-                    const isChecked = index === 0 ? 'checked' : ''; 
+                    
+                    // --- 2. ดึงสถานะตาเปิด/ปิด จาก localStorage มาใช้งาน ---
+                    let isVisible = layerVisibilityState[layer.name] !== undefined ? layerVisibilityState[layer.name] : true;
+                    let checkedAttr = isVisible ? 'checked' : '';
+                    
+                    // ถ้าเช็คว่าตาเปิดอยู่ ให้เอา Layer ไปวางบนแผนที่
+                    if (isVisible && !map.hasLayer(layerGroups[layer.name])) {
+                        map.addLayer(layerGroups[layer.name]);
+                    }
+
+                    // --- 3. ดึงสถานะปุ่มเลือก (Radio) จาก localStorage ---
+                    let isRadioChecked = '';
+                    if (activeLayerState) {
+                        isRadioChecked = (layer.name === activeLayerState) ? 'checked' : '';
+                    } else {
+                        isRadioChecked = (index === 0) ? 'checked' : '';
+                    }
                     
                     container.innerHTML += `
                         <label class="block relative cursor-pointer group">
-                            <input type="radio" name="active_layer" value="${layer.name}" class="layer-selector sr-only" ${isChecked}>
+                            <input type="radio" name="active_layer" value="${layer.name}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value)">
                             <div class="flex items-center justify-between p-3 bg-slate-800 border-2 border-transparent rounded-xl transition group-hover:bg-slate-700 pr-1">
                                 <div class="flex items-center gap-2 md:gap-3">
-                                    <input type="checkbox" checked class="w-4 h-4 accent-emerald-500 layer-toggle" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
+                                    <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
                                     <span class="text-xs md:text-sm font-medium flex items-center gap-2 w-24 md:w-28 overflow-hidden text-ellipsis whitespace-nowrap" title="${layer.name}">${iconHtml} ${layer.name}</span>
                                 </div>
                                 <div class="flex gap-1">
@@ -319,6 +325,19 @@
                 fetchFeatures();
             });
         }
+
+        // --- 4. อัปเดต localStorage ทันทีที่มีการคลิกปิดตา/เปิดตา ---
+        window.toggleLayerVisibility = function(checkbox) { 
+            const layerName = checkbox.getAttribute('data-layer'); 
+            if(checkbox.checked) {
+                map.addLayer(layerGroups[layerName]); 
+                layerVisibilityState[layerName] = true;
+            } else {
+                map.removeLayer(layerGroups[layerName]); 
+                layerVisibilityState[layerName] = false;
+            }
+            localStorage.setItem('maechanLayerVisibility', JSON.stringify(layerVisibilityState));
+        };
 
         function fetchFeatures() {
             Object.values(layerGroups).forEach(group => group.clearLayers());
@@ -393,9 +412,8 @@
             });
         }
 
-        // --- ระบบวิเคราะห์รัศมี (วาด Heatmap ก่อน แล้ววาดเส้นวงแหวนทับแบบโปร่งแสง) ---
         window.drawCombinedAnalysis = function() {
-            autoCloseSidebarOnMobile(); // ปิดเมนูเพื่อดูแผนที่เต็มจอ
+            autoCloseSidebarOnMobile();
             bufferGroup.clearLayers(); 
             let pointCount = 0;
             
@@ -610,7 +628,6 @@
             body.innerHTML = bodyHtml || `<tr><td colspan="${colCount}" class="p-8 text-center text-slate-400 text-xs md:text-sm bg-slate-50"><i class="fa-solid fa-folder-open mb-2 text-2xl text-slate-300 block"></i>ไม่มีข้อมูลในชั้นข้อมูลนี้</td></tr>`;
 
             panel.classList.add('open'); 
-            // ลดความสูงแผนที่ลงเพื่อให้ตารางโผล่มา
             if(window.innerWidth < 768) { mapEl.style.height = '55vh'; } else { mapEl.style.height = '65vh'; }
             setTimeout(() => map.invalidateSize(), 300);
         }
@@ -624,10 +641,7 @@
                     if (layer.feature && layer.feature.properties.id === id) { 
                         const bounds = layer.getBounds ? layer.getBounds().getCenter() : layer.getLatLng(); 
                         map.flyTo(bounds, 18, { duration: 0.5 }); 
-                        
-                        // ถ้ารันบนมือถือ ให้ปิดตารางลงไปก่อนเพื่อให้เห็นแผนที่ชัดๆ
                         if(window.innerWidth < 768) { closeTable(); }
-                        
                         setTimeout(() => layer.openPopup(), 500); 
                     } 
                 }); 
@@ -671,7 +685,7 @@
         };
 
         window.deleteFeature = function(id) { if(confirm("ต้องการลบพิกัดนี้ใช่หรือไม่?")) { fetch(`/api/features/${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if(data.status === "success") fetchFeatures(); }); } };
-        window.toggleLayerVisibility = function(checkbox) { const layerName = checkbox.getAttribute('data-layer'); if(checkbox.checked) map.addLayer(layerGroups[layerName]); else map.removeLayer(layerGroups[layerName]); };
+        
         function toggleModal(modalID) { const modal = document.getElementById(modalID); const content = document.getElementById(modalID + 'Content'); if (modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10); } else { modal.classList.add('opacity-0'); content.classList.add('scale-95'); setTimeout(() => { modal.classList.add('hidden'); }, 300); } }
         
         window.openAddLayerModal = function() { 
@@ -696,7 +710,9 @@
             document.getElementById('new_layer_color').value = layer.color; 
             document.getElementById('new_layer_type').value = layer.type; 
             document.getElementById('fields_container').innerHTML = ''; 
+            
             if(layer.fields) { layer.fields.forEach(f => addFieldRow(f.name, f.type, f.name)); } 
+            
             document.getElementById('btnSaveLayer').innerHTML = 'บันทึกการแก้ไข'; 
             document.getElementById('btnDeleteLayer').classList.remove('hidden'); 
             toggleModal('layerModal'); 
@@ -722,26 +738,20 @@
             const fieldsData = []; 
             const fieldNames = document.querySelectorAll('.field-name-input'); 
             const fieldTypes = document.querySelectorAll('.field-type-input'); 
+            
             for(let i = 0; i < fieldNames.length; i++) { 
                 if(fieldNames[i].value.trim() !== '') { 
-                    fieldsData.push({ 
-                        name: fieldNames[i].value.trim(), 
-                        old_name: fieldNames[i].getAttribute('data-oldname') || '',
-                        type: fieldTypes[i].value 
-                    }); 
+                    fieldsData.push({ name: fieldNames[i].value.trim(), old_name: fieldNames[i].getAttribute('data-oldname') || '', type: fieldTypes[i].value }); 
                 } 
             } 
+            
             fetch(id ? `/api/layers/${id}` : '/api/layers', { 
                 method: id ? 'PUT' : 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({ name, color, type, fields: fieldsData }) 
             })
             .then(res => res.json()).then(data => { 
-                if(data.status === "success") { 
-                    toggleModal('layerModal'); fetchLayers(); 
-                } else if(data.status === "error_duplicate") { 
-                    alert("ชื่อชั้นข้อมูลนี้มีอยู่แล้ว กรุณาใช้ชื่ออื่นครับ"); 
-                } 
+                if(data.status === "success") { toggleModal('layerModal'); fetchLayers(); } else if(data.status === "error_duplicate") { alert("ชื่อชั้นข้อมูลนี้มีอยู่แล้ว กรุณาใช้ชื่ออื่นครับ"); } 
             }); 
         };
 
