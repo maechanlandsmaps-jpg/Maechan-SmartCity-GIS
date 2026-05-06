@@ -1,22 +1,33 @@
 from flask import Flask, render_template, request, jsonify
-import sqlite3
+import psycopg2
+from psycopg2 import errors
 import json
 import os
 
 app = Flask(__name__)
-DB_FILE = 'gis_data_v4.db'
+
+# ดึง URL ของฐานข้อมูลคลาวด์จาก Render
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db_connection():
+    if not DATABASE_URL:
+        raise ValueError("ยังไม่ได้ตั้งค่า DATABASE_URL")
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
 
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
+    
+    # เปลี่ยนจากการใช้ AUTOINCREMENT ของ SQLite เป็น SERIAL ของ PostgreSQL
     c.execute('''CREATE TABLE IF NOT EXISTS features
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 (id SERIAL PRIMARY KEY,
                   layer_name TEXT,
                   properties TEXT,
                   geojson TEXT)''')
     
     c.execute('''CREATE TABLE IF NOT EXISTS layers
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 (id SERIAL PRIMARY KEY,
                   name TEXT UNIQUE,
                   color TEXT,
                   type TEXT,
@@ -25,13 +36,22 @@ def init_db():
     c.execute("SELECT count(*) FROM layers")
     if c.fetchone()[0] == 0:
         default_fields = '[{"name": "ชื่อ", "type": "Text"}, {"name": "รายละเอียด", "type": "Text"}]'
-        c.execute("INSERT INTO layers (name, color, type, fields) VALUES ('ประปาทำแดง', '#3b82f6', 'Line', ?)", (default_fields,))
-        c.execute("INSERT INTO layers (name, color, type, fields) VALUES ('เสาไฟฟ้า', '#eab308', 'Point', ?)", (default_fields,))
+        # เปลี่ยน ? เป็น %s สำหรับ PostgreSQL
+        c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)", 
+                  ('ประปาทำแดง', '#3b82f6', 'Line', default_fields))
+        c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)", 
+                  ('เสาไฟฟ้า', '#eab308', 'Point', default_fields))
         
     conn.commit()
+    c.close()
     conn.close()
 
-init_db()
+# ตรวจสอบว่ามี DATABASE URL ไหม ถ้ามีให้สร้างตารางเตรียมไว้เลย
+if DATABASE_URL:
+    try:
+        init_db()
+    except Exception as e:
+        print("ไม่สามารถเชื่อมต่อฐานข้อมูลได้:", e)
 
 @app.route('/')
 def index():
@@ -39,10 +59,11 @@ def index():
 
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT id, name, color, type, fields FROM layers")
     rows = c.fetchall()
+    c.close()
     conn.close()
     layers = [{"id": r[0], "name": r[1], "color": r[2], "type": r[3], "fields": json.loads(r[4] if r[4] else '[]')} for r in rows]
     return jsonify(layers)
@@ -50,26 +71,28 @@ def get_layers():
 @app.route('/api/layers', methods=['POST'])
 def add_layer():
     data = request.json
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
     clean_fields = [{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])]
     fields_str = json.dumps(clean_fields)
     try:
-        c.execute("INSERT INTO layers (name, color, type, fields) VALUES (?, ?, ?, ?)", 
+        c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)", 
                   (data['name'], data['color'], data['type'], fields_str))
         conn.commit()
         status = "success"
-    except sqlite3.IntegrityError:
+    except errors.UniqueViolation:
+        conn.rollback()
         status = "error_duplicate"
+    c.close()
     conn.close()
     return jsonify({"status": status})
 
 @app.route('/api/layers/<int:layer_id>', methods=['PUT'])
 def edit_layer(layer_id):
     data = request.json
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT name FROM layers WHERE id = ?", (layer_id,))
+    c.execute("SELECT name FROM layers WHERE id = %s", (layer_id,))
     row = c.fetchone()
     old_layer_name = row[0]
     
@@ -80,7 +103,7 @@ def edit_layer(layer_id):
     fields_str = json.dumps(clean_fields)
 
     try:
-        c.execute("UPDATE layers SET name=?, color=?, type=?, fields=? WHERE id=?", 
+        c.execute("UPDATE layers SET name=%s, color=%s, type=%s, fields=%s WHERE id=%s", 
                   (new_layer_name, data['color'], data['type'], fields_str, layer_id))
         
         field_mapping = {}
@@ -91,7 +114,7 @@ def edit_layer(layer_id):
                 field_mapping[old_k] = new_k
 
         if old_layer_name != new_layer_name or len(field_mapping) > 0:
-            c.execute("SELECT id, properties, geojson FROM features WHERE layer_name=?", (old_layer_name,))
+            c.execute("SELECT id, properties, geojson FROM features WHERE layer_name=%s", (old_layer_name,))
             layer_features = c.fetchall()
 
             for feat_id, props_str, geojson_str in layer_features:
@@ -121,40 +144,45 @@ def edit_layer(layer_id):
                 except:
                     pass
 
-                c.execute("UPDATE features SET layer_name=?, properties=?, geojson=? WHERE id=?", 
+                c.execute("UPDATE features SET layer_name=%s, properties=%s, geojson=%s WHERE id=%s", 
                           (new_layer_name, json.dumps(new_props), geojson_str, feat_id))
 
         conn.commit()
         status = "success"
-    except sqlite3.IntegrityError:
+    except errors.UniqueViolation:
+        conn.rollback()
         status = "error_duplicate"
     except Exception as e:
+        conn.rollback()
         print("Error Update:", e)
         status = "error"
         
+    c.close()
     conn.close()
     return jsonify({"status": status})
 
 @app.route('/api/layers/<int:layer_id>', methods=['DELETE'])
 def delete_layer(layer_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT name FROM layers WHERE id = ?", (layer_id,))
+    c.execute("SELECT name FROM layers WHERE id = %s", (layer_id,))
     row = c.fetchone()
     if row:
         layer_name = row[0]
-        c.execute("DELETE FROM features WHERE layer_name = ?", (layer_name,))
-        c.execute("DELETE FROM layers WHERE id = ?", (layer_id,))
+        c.execute("DELETE FROM features WHERE layer_name = %s", (layer_name,))
+        c.execute("DELETE FROM layers WHERE id = %s", (layer_id,))
         conn.commit()
+    c.close()
     conn.close()
     return jsonify({"status": "success"})
 
 @app.route('/api/features', methods=['GET'])
 def get_features():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT id, layer_name, properties, geojson FROM features")
     rows = c.fetchall()
+    c.close()
     conn.close()
     features = []
     for row in rows:
@@ -168,20 +196,22 @@ def get_features():
 @app.route('/api/features', methods=['POST'])
 def save_feature():
     data = request.json
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (?, ?, ?)", 
+    c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (%s, %s, %s)", 
               (data.get('layer_name'), json.dumps(data.get('properties', {})), json.dumps(data.get('geojson'))))
     conn.commit()
+    c.close()
     conn.close()
     return jsonify({"status": "success"})
 
 @app.route('/api/features/<int:feature_id>', methods=['DELETE'])
 def delete_feature(feature_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
-    c.execute("DELETE FROM features WHERE id = ?", (feature_id,))
+    c.execute("DELETE FROM features WHERE id = %s", (feature_id,))
     conn.commit()
+    c.close()
     conn.close()
     return jsonify({"status": "success"})
 
@@ -191,7 +221,7 @@ def import_features():
     if not data or 'features' not in data:
         return jsonify({"status": "error", "message": "รูปแบบไฟล์ GeoJSON ไม่ถูกต้อง"})
     
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     layers_data = {}
@@ -209,7 +239,7 @@ def import_features():
                 layers_data[layer_name]['keys'].add(key)
 
     for layer_name, l_data in layers_data.items():
-        c.execute("SELECT id, fields FROM layers WHERE name = ?", (layer_name,))
+        c.execute("SELECT id, fields FROM layers WHERE name = %s", (layer_name,))
         row = c.fetchone()
         
         if not row:
@@ -220,7 +250,7 @@ def import_features():
                 if 'Line' in sample_type or 'Polygon' in sample_type:
                     geo_type = 'Line'
                     
-            c.execute("INSERT INTO layers (name, color, type, fields) VALUES (?, ?, ?, ?)",
+            c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)",
                       (layer_name, '#94a3b8', geo_type, json.dumps(fields_schema)))
         else:
             layer_id = row[0]
@@ -234,14 +264,15 @@ def import_features():
                 if k not in existing_keys:
                     existing_fields.append({"name": k, "type": "Text"})
             
-            c.execute("UPDATE layers SET fields = ? WHERE id = ?", (json.dumps(existing_fields), layer_id))
+            c.execute("UPDATE layers SET fields = %s WHERE id = %s", (json.dumps(existing_fields), layer_id))
         
         for feature in l_data['features']:
             props = feature.get('properties', {})
-            c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (?, ?, ?)",
+            c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (%s, %s, %s)",
                       (layer_name, json.dumps(props), json.dumps(feature)))
             
     conn.commit()
+    c.close()
     conn.close()
     return jsonify({"status": "success"})
 
