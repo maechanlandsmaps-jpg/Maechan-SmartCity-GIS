@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart City GIS | เทศบาลตำบลแม่จัน</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.14.2/dist/leaflet-geoman.css" />
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.14.2/dist/leaflet-geoman.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <style>
+        body { font-family: 'Prompt', sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100%; z-index: 10; transition: height 0.3s ease; }
+        .leaflet-popup-content { font-family: 'Prompt', sans-serif; min-width: 220px; }
+        .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
+        input[type="color"] { -webkit-appearance: none; border: none; width: 100%; height: 40px; border-radius: 8px; cursor: pointer; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: none; border-radius: 8px; }
+
+        #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
+        #attribute-panel.open { height: 35vh; border-top: 4px solid #1e293b; }
+        .table-container { flex: 1; overflow: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { position: sticky; top: 0; background: #f8fafc; z-index: 1; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        td { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="flex h-screen bg-slate-100 relative">
+
+    <aside class="w-80 bg-slate-900 text-white flex flex-col shadow-2xl z-20 relative shrink-0">
+        <div class="p-6 border-b border-slate-800">
+            <h1 class="text-xl font-bold text-emerald-400 flex items-center gap-3">
+                <i class="fa-solid fa-map-location-dot"></i> Maechan GIS
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Smart City Data Platform</p>
+        </div>
+        
+        <div class="flex-1 p-4 flex flex-col overflow-hidden">
+            <div class="flex flex-col gap-2 mb-4">
+                <div class="flex justify-between items-center mb-1">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">ชั้นข้อมูล (Layers)</h2>
+                    <button onclick="openAddLayerModal()" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded-md transition font-bold shadow-md">
+                        <i class="fa-solid fa-plus"></i> เพิ่ม
+                    </button>
+                </div>
+                <div class="flex gap-1 justify-between items-center">
+                    <select id="bufferRadiusSelect" class="text-[10px] bg-slate-800 text-white border border-slate-700 rounded px-1 py-1.5 outline-none focus:border-purple-500 w-16 text-center">
+                        <option value="50">50m</option>
+                        <option value="100">100m</option>
+                        <option value="200">200m</option>
+                        <option value="300">300m</option>
+                        <option value="400">400m</option>
+                        <option value="500">500m</option>
+                    </select>
+                    <button onclick="drawCombinedAnalysis()" class="flex-1 text-[10px] bg-purple-500 hover:bg-purple-600 text-white px-1.5 py-1.5 rounded transition font-bold shadow-md" title="วิเคราะห์พื้นที่ให้บริการ (ฮีทแมพ + วงแหวน)">
+                        <i class="fa-solid fa-bullseye"></i> วิเคราะห์รัศมี
+                    </button>
+                    <button onclick="clearBufferArea()" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded transition font-bold" title="ล้างการวิเคราะห์ทั้งหมด">
+                        <i class="fa-solid fa-eraser"></i> ล้าง
+                    </button>
+                </div>
+            </div>
+            
+            <div class="space-y-3 overflow-y-auto flex-1 hide-scrollbar" id="layer-container">
+                <div class="text-center text-slate-500 text-sm mt-10"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูล...</div>
+            </div>
+            
+            <p class="text-[10px] text-slate-400 mt-4 leading-relaxed shrink-0"><i class="fa-solid fa-circle-info text-blue-400"></i> เลือกชั้นข้อมูล เลือกระยะทาง แล้วกดวิเคราะห์รัศมี</p>
+        </div>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-800/30">
+            <div class="flex gap-2">
+                <button onclick="exportGeoJSON()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-blue-400 text-[10px] font-bold py-2.5 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-download mr-1"></i> ส่งออก</button>
+                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-[10px] font-bold py-2.5 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> นำเข้า</button>
+                <input type="file" id="importFile" accept=".geojson,.json,.kml,.kmz,.zip" class="hidden" onchange="importFileHandler(event)">
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col relative z-10">
+        <div id="map"></div>
+
+        <div id="attribute-panel" class="bg-white z-30 shadow-2xl">
+            <div class="p-3 flex justify-between items-center border-b bg-slate-50 shrink-0">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm"><i class="fa-solid fa-table text-blue-500"></i> ตารางข้อมูล: <span id="current-table-layer" class="text-blue-600">-</span></h3>
+                <div class="flex items-center gap-4">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" id="table-search" placeholder="ค้นหาในตาราง..." class="text-xs border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-blue-500 w-64 bg-white" onkeyup="filterTable()">
+                    </div>
+                    <button onclick="closeTable()" class="text-slate-400 hover:text-red-500 transition"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+            </div>
+            <div class="table-container p-0">
+                <table id="attribute-table" class="text-sm text-left w-full">
+                    <thead id="table-head"></thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="layerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[90vh] overflow-y-auto" id="layerModalContent">
+            <div class="flex justify-between items-center mb-5">
+                <h2 class="text-lg font-bold text-slate-800" id="layerModalTitle"><i class="fa-solid fa-layer-group text-emerald-500 mr-2"></i> สร้างชั้นข้อมูลใหม่</h2>
+                <button type="button" onclick="toggleModal('layerModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="saveLayer(event)" class="space-y-4">
+                <input type="hidden" id="current_edit_layer_id" value="">
+
+                <div><label class="block text-xs font-bold text-slate-600 mb-1.5">ชื่อชั้นข้อมูล</label><input type="text" id="new_layer_name" required class="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-emerald-500" placeholder="เช่น ร้านกาแฟ, ท่อระบายน้ำ..."></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-600 mb-1.5">เลือกสี</label><input type="color" id="new_layer_color" value="#10b981"></div>
+                    <div><label class="block text-xs font-bold text-slate-600 mb-1.5">ประเภท</label><select id="new_layer_type" class="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-emerald-500 bg-white"><option value="Point">จุด (Marker)</option><option value="Line">เส้น / รูปปิด</option></select></div>
+                </div>
+                
+                <div class="pt-4 border-t border-slate-100">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs font-bold text-slate-600">ฟิลด์ข้อมูลเพิ่มเติม (Attributes)</label>
+                        <button type="button" onclick="addFieldRow()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold transition"><i class="fa-solid fa-plus"></i> เพิ่มฟิลด์</button>
+                    </div>
+                    <div id="fields_container" class="space-y-2"></div>
+                </div>
+
+                <div class="flex flex-col gap-2 mt-4 pt-2">
+                    <button type="submit" id="btnSaveLayer" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-lg text-sm shadow-md transition">บันทึกชั้นข้อมูล</button>
+                    <button type="button" id="btnDeleteLayer" onclick="deleteCurrentLayer()" class="hidden w-full bg-red-50 hover:bg-red-500 text-red-500 hover:text-white font-bold py-2.5 rounded-lg text-sm shadow-sm transition border border-red-100">ลบชั้นข้อมูลนี้ทิ้ง</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="analyticsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform scale-95 transition-transform duration-300" id="analyticsModalContent">
+            <div class="flex justify-between items-center mb-5 border-b pb-3">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800" id="analyticsTitle"><i class="fa-solid fa-chart-pie text-purple-500 mr-2"></i> สรุปข้อมูล</h2>
+                    <p class="text-xs text-slate-500" id="analyticsSubtitle">ภาพรวมชั้นข้อมูล</p>
+                </div>
+                <button type="button" onclick="toggleModal('analyticsModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                    <span class="block text-xs font-bold text-slate-400 mb-1 uppercase">จำนวนพิกัด</span>
+                    <span class="text-3xl font-bold text-slate-800" id="analyticsCount">0</span>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center" id="analyticsGeoStatBox">
+                    <span class="block text-xs font-bold text-slate-400 mb-1 uppercase" id="analyticsGeoLabel">-</span>
+                    <span class="text-2xl font-bold text-emerald-500" id="analyticsGeoValue">-</span>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl border border-slate-100 p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-bold text-slate-500" id="chartLabel">วิเคราะห์สัดส่วนข้อมูลตาม:</h3>
+                    <select id="analyticsFieldSelect" class="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-purple-500 bg-white" onchange="updateAnalyticsChart()"></select>
+                </div>
+                <div class="h-48 relative flex justify-center">
+                    <canvas id="layerAnalyticsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] hidden flex items-center justify-center transition-opacity duration-300">
+        <div class="bg-white rounded-xl p-6 flex flex-col items-center shadow-2xl">
+            <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
+            <p class="font-bold text-slate-700" id="loadingText">กำลังอ่านไฟล์แผนที่...</p>
+            <p class="text-xs text-slate-500 mt-1">โปรดรอสักครู่ ระบบกำลังจัดกลุ่มข้อมูลและสกัดฟิลด์</p>
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.font.family = 'Prompt';
+
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
+
+        const map = L.map('map', { center: [20.1525, 99.8475], zoom: 15, layers: [osmLayer] });
+        L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Satellite)": satelliteLayer }).addTo(map);
+
+        map.pm.setLang('th');
+        map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false, drawPolygon: true, drawRectangle: true });
+
+        let appLayers = []; 
+        let layerGroups = {}; 
+        let allFeatures = [];
+        let analyticsChartInstance = null;
+        let currentAnalyticsLayer = ''; 
+
+        // กลุ่มสำหรับเก็บกราฟฟิกการวิเคราะห์ (Buffer + Heatmap)
+        let bufferGroup = L.layerGroup().addTo(map);
+
+        function formatDistance(meters) {
+            if (meters >= 1000) return `${(meters / 1000).toFixed(2)} กม.`;
+            return `${meters.toFixed(2)} ม.`;
+        }
+
+        function formatArea(sqm) {
+            const rai = Math.floor(sqm / 1600);
+            const rem = sqm % 1600;
+            const ngan = Math.floor(rem / 400);
+            const sqwa = rem % 400 / 4;
+            let text = '';
+            if (rai > 0) text += rai + ' ไร่ ';
+            if (ngan > 0) text += ngan + ' งาน ';
+            if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.';
+            return text.trim();
+        }
+
+        function getMeasurementBadge(geojson) {
+            try {
+                if (geojson.geometry.type === 'LineString' || geojson.geometry.type === 'MultiLineString') {
+                    const distance = turf.length(geojson, {units: 'meters'});
+                    return `<div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-blue-100 shadow-sm"><i class="fa-solid fa-ruler-horizontal mr-1"></i> ความยาว: ${formatDistance(distance)}</div>`;
+                } else if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') {
+                    const area = turf.area(geojson);
+                    return `<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-emerald-100 shadow-sm"><i class="fa-solid fa-draw-polygon mr-1"></i> พื้นที่: ${formatArea(area)}</div>`;
+                }
+            } catch(e) { console.error("คำนวณไม่ได้:", e); }
+            return '';
+        }
+
+        function fetchLayers() {
+            fetch('/api/layers').then(res => res.json()).then(layers => {
+                appLayers = layers;
+                const container = document.getElementById('layer-container');
+                container.innerHTML = ''; 
+                layers.forEach((layer, index) => {
+                    if (!layerGroups[layer.name]) { layerGroups[layer.name] = L.featureGroup().addTo(map); }
+                    const iconHtml = layer.type === 'Point' ? `<i class="fa-solid fa-location-dot" style="color: ${layer.color}"></i>` : `<i class="fa-solid fa-route" style="color: ${layer.color}"></i>`;
+                    const isChecked = index === 0 ? 'checked' : ''; 
+                    
+                    container.innerHTML += `
+                        <label class="block relative cursor-pointer group">
+                            <input type="radio" name="active_layer" value="${layer.name}" class="layer-selector sr-only" ${isChecked}>
+                            <div class="flex items-center justify-between p-3 bg-slate-800 border-2 border-transparent rounded-xl transition group-hover:bg-slate-700 pr-1">
+                                <div class="flex items-center gap-3">
+                                    <input type="checkbox" checked class="w-4 h-4 accent-emerald-500 layer-toggle" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
+                                    <span class="text-sm font-medium flex items-center gap-2 w-28 overflow-hidden text-ellipsis whitespace-nowrap" title="${layer.name}">${iconHtml} ${layer.name}</span>
+                                </div>
+                                <div class="flex gap-1">
+                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLayerDashboard('${layer.name}')" class="p-2 text-slate-500 hover:text-purple-400 transition" title="แดชบอร์ดวิเคราะห์"><i class="fa-solid fa-chart-pie text-xs"></i></button>
+                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openTable('${layer.name}')" class="p-2 text-slate-500 hover:text-blue-400 transition" title="เปิดตารางข้อมูล"><i class="fa-solid fa-table-list text-xs"></i></button>
+                                    <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openEditLayerModal(${layer.id})" class="p-2 text-slate-500 hover:text-emerald-400 transition" title="แก้ไขชั้นข้อมูล"><i class="fa-solid fa-pen text-xs"></i></button>
+                                </div>
+                            </div>
+                        </label>
+                    `;
+                });
+                fetchFeatures();
+            });
+        }
+
+        function fetchFeatures() {
+            Object.values(layerGroups).forEach(group => group.clearLayers());
+            fetch('/api/features').then(res => res.json()).then(data => {
+                allFeatures = data.features; 
+                L.geoJSON(data, {
+                    pointToLayer: function (feature, latlng) {
+                        const layerInfo = appLayers.find(l => l.name === feature.properties.layer_name);
+                        const color = layerInfo ? layerInfo.color : '#3388ff';
+                        return L.circleMarker(latlng, { color: color, radius: 8, fillColor: color, fillOpacity: 0.8 });
+                    },
+                    style: function (feature) {
+                        const layerInfo = appLayers.find(l => l.name === feature.properties.layer_name);
+                        const color = layerInfo ? layerInfo.color : '#3388ff';
+                        return { color: color, weight: 4 };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        const props = feature.properties;
+                        const layerInfo = appLayers.find(l => l.name === props.layer_name);
+                        const color = layerInfo ? layerInfo.color : '#64748b';
+                        const iconClass = layerInfo?.type === 'Point' ? 'fa-solid fa-location-dot' : 'fa-solid fa-route';
+                        
+                        const measurementBadge = getMeasurementBadge(feature);
+                        
+                        let customPropsHtml = '';
+                        if(layerInfo && layerInfo.fields) {
+                            layerInfo.fields.forEach(f => {
+                                const val = props[f.name];
+                                if(val) customPropsHtml += `<div class="mb-2"><span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">${f.name}</span> <span class="block text-sm text-slate-800 break-words">${val}</span></div>`;
+                            });
+                        }
+                        for (const [key, value] of Object.entries(props)) {
+                            if(!['id', 'layer_name'].includes(key) && !(layerInfo?.fields?.find(f => f.name === key))) {
+                                if(value) customPropsHtml += `<div class="mb-2"><span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">${key}</span> <span class="block text-sm text-slate-800 break-words">${value}</span></div>`;
+                            }
+                        }
+
+                        let bufferButtonHtml = '';
+                        if (feature.geometry.type === 'Point') {
+                            const lat = feature.geometry.coordinates[1];
+                            const lng = feature.geometry.coordinates[0];
+                            bufferButtonHtml = `
+                                <button onclick="drawBufferArea(${lat}, ${lng})" class="text-xs bg-purple-50 hover:bg-purple-500 text-purple-600 hover:text-white px-3 py-1.5 rounded-lg font-bold transition w-full mb-2 border border-purple-100">
+                                    <i class="fa-solid fa-bullseye mr-1"></i> วิเคราะห์รัศมี (50m - 500m)
+                                </button>
+                            `;
+                        }
+
+                        const popupContent = `
+                            <div class="mb-3 border-b-2 pb-2" style="border-color: ${color}">
+                                <h3 class="text-md font-bold" style="color: ${color}"><i class="${iconClass} mr-1"></i> ${props.layer_name || 'นำเข้าใหม่'}</h3>
+                            </div>
+                            ${measurementBadge}
+                            <div class="max-h-48 overflow-y-auto pr-1">
+                                ${customPropsHtml ? customPropsHtml : '<p class="text-sm text-slate-500 italic">ไม่มีข้อมูลระบุ</p>'}
+                            </div>
+                            <div class="mt-3 pt-3 border-t border-slate-100">
+                                ${bufferButtonHtml}
+                                <button onclick="deleteFeature(${props.id})" class="text-xs bg-red-50 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-lg font-bold transition w-full"><i class="fa-solid fa-trash-can"></i> ลบพิกัดนี้</button>
+                            </div>
+                        `;
+                        layer.bindPopup(popupContent);
+                        if(layerGroups[props.layer_name]) { layerGroups[props.layer_name].addLayer(layer); }
+                    }
+                });
+                
+                const panel = document.getElementById('attribute-panel');
+                if(panel.classList.contains('open')) {
+                    const currentLayerInTable = document.getElementById('current-table-layer').innerText;
+                    if(currentLayerInTable !== '-') openTable(currentLayerInTable);
+                }
+            });
+        }
+
+        // --- ระบบวิเคราะห์รัศมี (วาด Heatmap ก่อน แล้ววาดเส้นวงแหวนทับแบบโปร่งแสง) ---
+        window.drawCombinedAnalysis = function() {
+            bufferGroup.clearLayers(); 
+            let pointCount = 0;
+            
+            const activeLayerRadio = document.querySelector('input[name="active_layer"]:checked');
+            if (!activeLayerRadio) return;
+            const activeLayerName = activeLayerRadio.value;
+
+            const selectedRadius = parseInt(document.getElementById('bufferRadiusSelect').value);
+            
+            let pixelRadius = 40;
+            if(selectedRadius >= 100) pixelRadius = 60;
+            if(selectedRadius >= 200) pixelRadius = 80;
+            if(selectedRadius >= 400) pixelRadius = 100;
+
+            let heatPoints = [];
+            let circlesData = [];
+
+            allFeatures.forEach(f => {
+                if (f.properties.layer_name === activeLayerName && f.geometry.type === 'Point') {
+                    const lat = f.geometry.coordinates[1];
+                    const lng = f.geometry.coordinates[0];
+                    const layerInfo = appLayers.find(l => l.name === activeLayerName);
+                    const color = layerInfo ? layerInfo.color : '#a855f7'; 
+                    
+                    // 1. วาดวงแหวน (เส้นบางๆ โปร่งแสงมาก ไม่ให้รก)
+                    const circle = L.circle([lat, lng], {
+                        radius: selectedRadius,
+                        color: color,
+                        weight: 2,           
+                        dashArray: '4', 
+                        fillColor: color,
+                        fillOpacity: 0.05,   
+                        interactive: false   
+                    });
+                    
+                    bufferGroup.addLayer(circle);
+
+                    // 2. เก็บพิกัดไว้ทำ Heatmap
+                    heatPoints.push([lat, lng, 1]);
+                    pointCount++;
+                }
+            });
+
+            if (pointCount > 0) {
+                // 3. วาด Heatmap ซ้อนไว้ชั้นล่าง
+                let heatLayer = L.heatLayer(heatPoints, {
+                    radius: pixelRadius,
+                    blur: pixelRadius - 10,
+                    maxZoom: 17,
+                    gradient: {0.4: '#3b82f6', 0.6: '#10b981', 0.8: '#eab308', 1.0: '#ef4444'} 
+                });
+                bufferGroup.addLayer(heatLayer);
+
+                map.flyToBounds(bufferGroup.getBounds(), {padding: [50, 50], duration: 0.8});
+            } else {
+                alert(`ไม่พบข้อมูลแบบ 'จุด (Marker)' ในชั้นข้อมูล [${activeLayerName}] เพื่อสร้างการวิเคราะห์ครับ`);
+            }
+        };
+
+        // --- วิเคราะห์รัศมีเฉพาะจุด (50m-500m) ---
+        window.drawBufferArea = function(lat, lng) {
+            bufferGroup.clearLayers();
+            const radii = [500, 400, 300, 200, 100, 50];
+            const colors = ['#fde047', '#fcd34d', '#fbbf24', '#f59e0b', '#f97316', '#ef4444'];
+
+            radii.forEach((radius, index) => {
+                const circle = L.circle([lat, lng], {
+                    radius: radius, 
+                    color: colors[index], 
+                    weight: 2, 
+                    dashArray: '4', 
+                    fillColor: colors[index], 
+                    fillOpacity: 0.1,
+                    interactive: false 
+                });
+                bufferGroup.addLayer(circle);
+            });
+            map.closePopup();
+            map.flyToBounds(bufferGroup.getBounds(), {padding: [50, 50], duration: 0.5});
+        };
+
+        window.clearBufferArea = function() {
+            bufferGroup.clearLayers();
+        };
+
+        window.openLayerDashboard = function(layerName) {
+            const layerInfo = appLayers.find(l => l.name === layerName);
+            if(!layerInfo) return;
+
+            currentAnalyticsLayer = layerName; 
+            const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName);
+            
+            document.getElementById('analyticsTitle').innerHTML = `<i class="fa-solid fa-chart-pie mr-2" style="color:${layerInfo.color}"></i> สรุปข้อมูล: ${layerName}`;
+            document.getElementById('analyticsCount').innerText = featuresInLayer.length.toLocaleString();
+
+            const geoBox = document.getElementById('analyticsGeoStatBox');
+            const geoLabel = document.getElementById('analyticsGeoLabel');
+            const geoValue = document.getElementById('analyticsGeoValue');
+
+            if(layerInfo.type === 'Line') {
+                geoBox.classList.remove('hidden');
+                geoLabel.innerText = "ความยาวรวมทั้งหมด";
+                let totalMeters = 0;
+                featuresInLayer.forEach(f => { if(f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') totalMeters += turf.length(f, {units: 'meters'}); });
+                geoValue.innerText = formatDistance(totalMeters);
+                geoValue.className = "text-xl font-bold text-blue-500";
+            } else if (layerInfo.type === 'Point') {
+                geoBox.classList.remove('hidden');
+                geoLabel.innerText = "สถานะ";
+                geoValue.innerText = "จุดพิกัด (Marker)";
+                geoValue.className = "text-xl font-bold text-slate-400";
+            } else {
+                geoBox.classList.remove('hidden');
+                geoLabel.innerText = "พื้นที่รวมทั้งหมด";
+                let totalSqm = 0;
+                featuresInLayer.forEach(f => { if(f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon') totalSqm += turf.area(f); });
+                geoValue.innerText = formatArea(totalSqm);
+                geoValue.className = "text-xl font-bold text-emerald-500";
+            }
+
+            const select = document.getElementById('analyticsFieldSelect');
+            select.innerHTML = '';
+            
+            if(layerInfo.fields && layerInfo.fields.length > 0) {
+                layerInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; });
+                select.style.display = 'block';
+                updateAnalyticsChart(); 
+            } else {
+                select.style.display = 'none';
+                document.getElementById('chartLabel').innerText = "ไม่มีฟิลด์ข้อมูลสำหรับวิเคราะห์";
+                drawEmptyChart(layerInfo.color, featuresInLayer.length);
+            }
+            toggleModal('analyticsModal');
+        }
+
+        window.updateAnalyticsChart = function() {
+            const fieldName = document.getElementById('analyticsFieldSelect').value;
+            const layerName = currentAnalyticsLayer;
+            const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName);
+            
+            const counts = {};
+            featuresInLayer.forEach(f => {
+                let val = f.properties[fieldName];
+                if(val === null || val === undefined || val.toString().trim() === '') val = "ไม่ระบุ";
+                counts[val] = (counts[val] || 0) + 1;
+            });
+
+            let sortedKeys = Object.keys(counts).sort((a,b) => counts[b] - counts[a]);
+            let displayCounts = {};
+            let otherCount = 0;
+            
+            if(sortedKeys.length > 8) {
+                sortedKeys.slice(0, 7).forEach(k => displayCounts[k] = counts[k]);
+                sortedKeys.slice(7).forEach(k => otherCount += counts[k]);
+                displayCounts['อื่นๆ'] = otherCount;
+            } else { displayCounts = counts; }
+
+            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d');
+            if(analyticsChartInstance) analyticsChartInstance.destroy();
+
+            const bgColors = Object.keys(displayCounts).map((key, i) => {
+                if (key === 'อื่นๆ' || key === 'ไม่ระบุ') return '#cbd5e1'; 
+                return `hsl(${(i * 137.5) % 360}, 70%, 60%)`;
+            });
+
+            analyticsChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: Object.keys(displayCounts), datasets: [{ data: Object.values(displayCounts), backgroundColor: bgColors, borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8, font: { size: 10, family: 'Prompt' } } } }, cutout: '65%' }
+            });
+        }
+        
+        function drawEmptyChart(color, count) {
+            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d');
+            if(analyticsChartInstance) analyticsChartInstance.destroy();
+            analyticsChartInstance = new Chart(ctx, {
+                type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' }
+            });
+        }
+
+        function openTable(layerName) {
+            const panel = document.getElementById('attribute-panel');
+            const mapEl = document.getElementById('map');
+            const layerInfo = appLayers.find(l => l.name === layerName);
+            if(!layerInfo) return;
+
+            document.getElementById('current-table-layer').innerText = layerName;
+            
+            const head = document.getElementById('table-head');
+            let headHtml = '<tr><th class="p-3 px-4 border-r w-16 text-center text-xs text-slate-500">ID</th>';
+            if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 px-4 border-r text-xs text-slate-700">${f.name}</th>`); }
+            headHtml += '<th class="p-3 px-4 border-r w-24 text-center text-xs text-slate-500">จัดการ</th></tr>';
+            head.innerHTML = headHtml;
+
+            const body = document.getElementById('table-body');
+            const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName);
+            let bodyHtml = '';
+            
+            featuresInLayer.forEach(f => {
+                bodyHtml += `<tr class="hover:bg-blue-50/50 cursor-pointer border-b transition">`;
+                bodyHtml += `<td class="p-2 px-4 border-r text-center font-mono text-xs text-slate-400" onclick="zoomToFeature(${f.properties.id})">${f.properties.id}</td>`;
+                
+                if (layerInfo.fields) {
+                    layerInfo.fields.forEach(field => {
+                        const val = f.properties[field.name] || '-';
+                        bodyHtml += `<td class="p-2 px-4 border-r text-sm text-slate-700" onclick="zoomToFeature(${f.properties.id})">${val}</td>`;
+                    });
+                }
+                
+                bodyHtml += `<td class="p-2 px-4 text-center"><button onclick="deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600 p-1"><i class="fa-solid fa-trash-can"></i></button></td></tr>`;
+            });
+            
+            const colCount = layerInfo.fields ? layerInfo.fields.length + 2 : 2;
+            body.innerHTML = bodyHtml || `<tr><td colspan="${colCount}" class="p-8 text-center text-slate-400 text-sm bg-slate-50"><i class="fa-solid fa-folder-open mb-2 text-2xl text-slate-300 block"></i>ไม่มีข้อมูลในชั้นข้อมูลนี้</td></tr>`;
+
+            panel.classList.add('open'); mapEl.style.height = '65vh'; setTimeout(() => map.invalidateSize(), 300);
+        }
+
+        function closeTable() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); }
+        function filterTable() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } }
+        function zoomToFeature(id) { Object.values(layerGroups).forEach(group => { group.eachLayer(layer => { if (layer.feature && layer.feature.properties.id === id) { const bounds = layer.getBounds ? layer.getBounds().getCenter() : layer.getLatLng(); map.flyTo(bounds, 18, { duration: 0.5 }); setTimeout(() => layer.openPopup(), 500); } }); }); }
+
+        let currentDrawLayer = null;
+        map.on('pm:create', (e) => {
+            currentDrawLayer = e.layer;
+            const activeLayerName = document.querySelector('input[name="active_layer"]:checked').value;
+            const layerInfo = appLayers.find(l => l.name === activeLayerName);
+            const color = layerInfo ? layerInfo.color : '#3388ff';
+
+            if (e.shape === "Marker") {
+                const latlng = currentDrawLayer.getLatLng(); map.removeLayer(currentDrawLayer);
+                currentDrawLayer = L.circleMarker(latlng, { color: color, radius: 8, fillColor: color, fillOpacity: 0.8 }).addTo(map);
+            } else { currentDrawLayer.setStyle({ color: color, weight: 4 }); }
+
+            const geojsonForMeasurement = currentDrawLayer.toGeoJSON ? currentDrawLayer.toGeoJSON() : null;
+            let measurementBadge = ''; if (geojsonForMeasurement) measurementBadge = getMeasurementBadge(geojsonForMeasurement);
+
+            let customInputHtml = '';
+            if(layerInfo && layerInfo.fields && layerInfo.fields.length > 0) {
+                layerInfo.fields.forEach(f => {
+                    let inputType = f.type === 'Number' ? 'number' : (f.type === 'Date' ? 'date' : 'text');
+                    
+                    // ป้องกัน old_name ทิ้งค่าไว้ในกรณีสร้างข้อมูลใหม่
+                    const oldNameAttr = `data-oldname="${f.name}"`;
+                    
+                    if (f.name === 'รายละเอียด' && f.type === 'Text') customInputHtml += `<div class="mb-3"><label class="block text-xs font-bold text-slate-600 mb-1">${f.name}</label><textarea data-fieldname="${f.name}" ${oldNameAttr} rows="2" class="custom-field-input w-full border border-slate-200 rounded p-1.5 text-sm outline-none focus:border-blue-500 resize-none"></textarea></div>`;
+                    else customInputHtml += `<div class="mb-3"><label class="block text-xs font-bold text-slate-600 mb-1">${f.name}</label><input type="${inputType}" data-fieldname="${f.name}" ${oldNameAttr} class="custom-field-input w-full border border-slate-200 rounded p-1.5 text-sm outline-none focus:border-blue-500"></div>`;
+                });
+            } else { customInputHtml = '<p class="text-xs text-slate-500 italic mb-4 mt-2">ชั้นข้อมูลนี้ไม่มีฟิลด์ให้กรอก สามารถกดบันทึกพิกัดได้เลยครับ</p>'; }
+
+            const formHtml = `<div class="min-w-[200px] max-h-64 overflow-y-auto pr-1"><div class="mb-3"><span class="text-[10px] font-bold text-white px-2 py-1 rounded-md uppercase tracking-wider shadow-sm" style="background-color: ${color}">${activeLayerName}</span></div>${measurementBadge}${customInputHtml}<div class="flex gap-2 mt-2"><button onclick="currentDrawLayer.remove()" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 rounded-lg text-sm transition">ยกเลิก</button><button onclick="saveCurrentFeature('${activeLayerName}')" class="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-sm shadow-md transition">บันทึกพิกัด</button></div></div>`;
+            currentDrawLayer.bindPopup(formHtml).openPopup();
+        });
+
+        window.saveCurrentFeature = function(layerName) {
+            let geojsonData = currentDrawLayer.toGeoJSON ? currentDrawLayer.toGeoJSON() : { type: "Feature", geometry: { type: "Point", coordinates: [currentDrawLayer.getLatLng().lng, currentDrawLayer.getLatLng().lat] } };
+            const propertiesData = {}; document.querySelectorAll('.custom-field-input').forEach(input => { propertiesData[input.dataset.fieldname] = input.value; });
+            currentDrawLayer.bindPopup('<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...').openPopup();
+            fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: propertiesData, geojson: geojsonData }) }).then(res => res.json()).then(data => { if(data.status === "success") { currentDrawLayer.closePopup(); fetchFeatures(); } });
+        };
+
+        window.deleteFeature = function(id) { if(confirm("ต้องการลบพิกัดนี้ใช่หรือไม่?")) { fetch(`/api/features/${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if(data.status === "success") fetchFeatures(); }); } };
+        window.toggleLayerVisibility = function(checkbox) { const layerName = checkbox.getAttribute('data-layer'); if(checkbox.checked) map.addLayer(layerGroups[layerName]); else map.removeLayer(layerGroups[layerName]); };
+        function toggleModal(modalID) { const modal = document.getElementById(modalID); const content = document.getElementById(modalID + 'Content'); if (modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10); } else { modal.classList.add('opacity-0'); content.classList.add('scale-95'); setTimeout(() => { modal.classList.add('hidden'); }, 300); } }
+        window.openAddLayerModal = function() { document.getElementById('current_edit_layer_id').value = ''; document.getElementById('layerModalTitle').innerHTML = '<i class="fa-solid fa-layer-group text-emerald-500 mr-2"></i> สร้างชั้นข้อมูลใหม่'; document.getElementById('new_layer_name').value = ''; document.getElementById('new_layer_color').value = '#10b981'; document.getElementById('new_layer_type').value = 'Point'; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ', 'Text'); addFieldRow('รายละเอียด', 'Text'); document.getElementById('btnSaveLayer').innerHTML = 'บันทึกชั้นข้อมูลใหม่'; document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
+        
+        window.openEditLayerModal = function(id) { 
+            const layer = appLayers.find(l => l.id === id); 
+            if(!layer) return; 
+            document.getElementById('current_edit_layer_id').value = layer.id; 
+            document.getElementById('layerModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-blue-500 mr-2"></i> แก้ไขชั้นข้อมูล'; 
+            document.getElementById('new_layer_name').value = layer.name; 
+            document.getElementById('new_layer_color').value = layer.color; 
+            document.getElementById('new_layer_type').value = layer.type; 
+            document.getElementById('fields_container').innerHTML = ''; 
+            
+            if(layer.fields) { 
+                // ส่งชื่อเดิมไปด้วยเพื่อใช้เทียบในการลบข้อมูล
+                layer.fields.forEach(f => addFieldRow(f.name, f.type, f.name)); 
+            } 
+            
+            document.getElementById('btnSaveLayer').innerHTML = 'บันทึกการแก้ไข'; 
+            document.getElementById('btnDeleteLayer').classList.remove('hidden'); 
+            toggleModal('layerModal'); 
+        }
+
+        // ฟังก์ชัน addFieldRow ปรับให้รับค่า originalName มาด้วย
+        function addFieldRow(defaultName = '', defaultType = 'Text', originalName = '') { 
+            const container = document.getElementById('fields_container'); 
+            const row = document.createElement('div'); 
+            row.className = "flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"; 
+            const selectedText = defaultType === 'Text' ? 'selected' : ''; 
+            const selectedNum = defaultType === 'Number' ? 'selected' : ''; 
+            const selectedDate = defaultType === 'Date' ? 'selected' : ''; 
+            
+            // แอบแนบ data-oldname ไว้ที่ input
+            row.innerHTML = `<input type="text" placeholder="ชื่อฟิลด์" value="${defaultName}" data-oldname="${originalName}" required class="field-name-input flex-1 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border border-slate-200 rounded px-2 py-1 text-xs outline-none bg-white focus:border-emerald-500"><option value="Text" ${selectedText}>ข้อความ</option><option value="Number" ${selectedNum}>ตัวเลข</option><option value="Date" ${selectedDate}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 px-1"><i class="fa-solid fa-trash"></i></button>`; 
+            container.appendChild(row); 
+        }
+
+        window.saveLayer = function(event) { 
+            event.preventDefault(); 
+            const id = document.getElementById('current_edit_layer_id').value; 
+            const name = document.getElementById('new_layer_name').value; 
+            const color = document.getElementById('new_layer_color').value; 
+            const type = document.getElementById('new_layer_type').value; 
+            const fieldsData = []; 
+            const fieldNames = document.querySelectorAll('.field-name-input'); 
+            const fieldTypes = document.querySelectorAll('.field-type-input'); 
+            
+            for(let i = 0; i < fieldNames.length; i++) { 
+                if(fieldNames[i].value.trim() !== '') { 
+                    // ส่ง old_name ไปด้วยให้ฝั่ง Python แปลงชื่อ Key ในข้อมูลพิกัดทั้งหมด
+                    fieldsData.push({ 
+                        name: fieldNames[i].value.trim(), 
+                        old_name: fieldNames[i].getAttribute('data-oldname') || '',
+                        type: fieldTypes[i].value 
+                    }); 
+                } 
+            } 
+            
+            fetch(id ? `/api/layers/${id}` : '/api/layers', { 
+                method: id ? 'PUT' : 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ name, color, type, fields: fieldsData }) 
+            })
+            .then(res => res.json()).then(data => { 
+                if(data.status === "success") { 
+                    toggleModal('layerModal'); fetchLayers(); 
+                } else if(data.status === "error_duplicate") { 
+                    alert("ชื่อชั้นข้อมูลนี้มีอยู่แล้ว กรุณาใช้ชื่ออื่นครับ"); 
+                } 
+            }); 
+        };
+
+        window.deleteCurrentLayer = function() { const id = document.getElementById('current_edit_layer_id').value; if(!id) return; if(confirm("ยืนยันการลบชั้นข้อมูลและพิกัดทั้งหมดใช่หรือไม่?")) { fetch(`/api/layers/${id}`, { method: 'DELETE' }).then(res => res.json()).then(data => { if(data.status === "success") { toggleModal('layerModal'); fetchLayers(); } }); } }
+        window.exportGeoJSON = function() { fetch('/api/features').then(res => res.json()).then(data => { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data)); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); }); };
+        
+        window.importFileHandler = async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            let defaultName = file.name.split('.')[0];
+            let layerName = prompt("โปรดตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", defaultName);
+            if (!layerName) { event.target.value = ''; return; }
+            const loadingModal = document.getElementById('loadingModal');
+            loadingModal.classList.remove('hidden');
+
+            try {
+                let geojson = null;
+                if (ext === 'geojson' || ext === 'json') { const text = await file.text(); geojson = JSON.parse(text); } 
+                else if (ext === 'kml') { const text = await file.text(); const dom = new DOMParser().parseFromString(text, 'text/xml'); geojson = toGeoJSON.kml(dom); } 
+                else if (ext === 'kmz') {
+                    const arrayBuffer = await file.arrayBuffer(); const zip = await JSZip.loadAsync(arrayBuffer);
+                    const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml'));
+                    if (kmlFile) { const kmlText = await kmlFile.async('text'); const dom = new DOMParser().parseFromString(kmlText, 'text/xml'); geojson = toGeoJSON.kml(dom); } else { throw new Error("ไม่พบไฟล์ .kml ในไฟล์ .kmz นี้ครับ"); }
+                } 
+                else if (ext === 'zip' || ext === 'shp') {
+                    const arrayBuffer = await file.arrayBuffer(); geojson = await shp(arrayBuffer);
+                    if (Array.isArray(geojson)) { let combinedFeatures = []; geojson.forEach(g => combinedFeatures = combinedFeatures.concat(g.features)); geojson = { type: "FeatureCollection", features: combinedFeatures }; }
+                } else { throw new Error("ระบบไม่รองรับไฟล์นามสกุล ." + ext + " ครับ"); }
+
+                if (!geojson || !geojson.features) { if (geojson && geojson.type === "Feature") { geojson = { type: "FeatureCollection", features: [geojson] }; } else { throw new Error("โครงสร้างไฟล์ข้อมูลไม่ถูกต้อง"); } }
+                geojson.features.forEach(f => { if (!f.properties) f.properties = {}; f.properties.layer_name = layerName; });
+
+                const response = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geojson) });
+                const data = await response.json();
+                if(data.status === "success") { alert("นำเข้าและสกัดฟิลด์ข้อมูลสำเร็จแล้วครับ!"); fetchLayers(); } else { throw new Error(data.message); }
+            } catch (err) { console.error(err); alert("เกิดข้อผิดพลาด: " + err.message); } finally { loadingModal.classList.add('hidden'); event.target.value = ''; }
+        };
+
+        fetchLayers(); 
+    </script>
+</body>
+</html>
