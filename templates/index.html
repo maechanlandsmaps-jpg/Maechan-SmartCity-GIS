@@ -28,6 +28,9 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; }
         
+        /* กรอบสีเขียวเวลาเลือกเลเยอร์ */
+        .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
+        
         #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
         #attribute-panel.open { height: 45vh; border-top: 4px solid #1e293b; } 
         .table-container { flex: 1; overflow: auto; }
@@ -82,8 +85,8 @@
         <div class="p-4 border-t border-slate-800 bg-slate-800/50">
             <button onclick="exportGeoJSON()" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm mb-2"><i class="fa-solid fa-download mr-1"></i> ส่งออกข้อมูลทั้งหมด</button>
             <div class="flex gap-2">
-                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> นำเข้า JSON</button>
-                <button onclick="document.getElementById('importShp').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-file-zipper mr-1"></i> นำเข้า SHP (.zip)</button>
+                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> JSON</button>
+                <button onclick="document.getElementById('importShp').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-file-zipper mr-1"></i> SHP (.zip)</button>
                 <input type="file" id="importFile" accept=".geojson,.json" class="hidden" onchange="importFileHandler(event)">
                 <input type="file" id="importShp" accept=".zip" class="hidden" onchange="importShpHandler(event)">
             </div>
@@ -186,7 +189,7 @@
     </div>
 
     <script>
-        // 🌍 ดาวเทียม Google Maps แบบ Hybrid ซูมลึกๆ ได้
+        // 🌍 แผนที่ดาวเทียม (Google Maps ซูมลึกสุดใจ)
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19 });
         const googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, attribution: '© Google' });
 
@@ -198,16 +201,18 @@
         L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
         map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
 
+        // 🧠 ระบบความจำ LocalStorage สำหรับการปิดตาเลเยอร์และการเลือกเลเยอร์
+        let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
+        let activeLayerState = localStorage.getItem('maechanActiveLayer');
+
         let appLayers = [];
         let layerGroups = {};
         let allFeatures = [];
-        
-        // ตัวแปรสำหรับ Analytics & Buffer
         let analyticsChartInstance = null;
         let currentAnalyticsLayer = ''; 
         let bufferGroup = L.layerGroup().addTo(map);
 
-        // 📏 กู้คืนฟังก์ชันคำนวณระยะทางและพื้นที่
+        // 📏 ฟังก์ชันคำนวณระยะทางและพื้นที่
         function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
         function formatArea(sqm) {
             const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4;
@@ -226,27 +231,45 @@
             const container = document.getElementById('layer-container');
             container.innerHTML = '';
             
-            appLayers.forEach(layer => {
-                if (!layerGroups[layer.name]) layerGroups[layer.name] = L.featureGroup().addTo(map);
+            appLayers.forEach((layer, index) => {
+                if (!layerGroups[layer.name]) layerGroups[layer.name] = L.featureGroup();
                 
+                let isVisible = layerVisibilityState[layer.name] !== undefined ? layerVisibilityState[layer.name] : true;
+                let checkedAttr = isVisible ? 'checked' : '';
+                
+                if (isVisible && !map.hasLayer(layerGroups[layer.name])) { map.addLayer(layerGroups[layer.name]); }
+                else if (!isVisible && map.hasLayer(layerGroups[layer.name])) { map.removeLayer(layerGroups[layer.name]); }
+                
+                let isRadioChecked = activeLayerState ? ((layer.name === activeLayerState) ? 'checked' : '') : ((index === 0) ? 'checked' : '');
+
                 container.innerHTML += `
-                    <label class="block cursor-pointer">
-                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded-xl border border-slate-700 hover:border-emerald-500 transition">
-                            <div class="flex items-center gap-3">
-                                <input type="radio" name="active_layer" value="${layer.name}" checked class="w-4 h-4 accent-emerald-500">
-                                <span class="text-sm font-medium" style="color: ${layer.color}"><i class="fa-solid fa-layer-group"></i> ${layer.name}</span>
+                    <label class="block cursor-pointer group">
+                        <input type="radio" name="active_layer" value="${layer.name}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value)">
+                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded-xl border-2 border-transparent transition group-hover:bg-slate-700 pr-1">
+                            <div class="flex items-center gap-2 md:gap-3">
+                                <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
+                                <span class="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis w-24 md:w-28" style="color: ${layer.color}" title="${layer.name}">
+                                    <i class="fa-solid fa-layer-group"></i> ${layer.name}
+                                </span>
                             </div>
                             <div class="flex gap-1">
-                                <button type="button" onclick="event.preventDefault(); openLayerDashboard('${layer.name}')" class="text-slate-500 hover:text-purple-400 p-1.5 transition"><i class="fa-solid fa-chart-pie text-xs"></i></button>
-                                <button type="button" onclick="event.preventDefault(); openTable('${layer.name}')" class="text-slate-500 hover:text-blue-400 p-1.5 transition"><i class="fa-solid fa-table-list text-xs"></i></button>
-                                <button type="button" onclick="event.preventDefault(); openEditModal('${layer.name}')" class="text-slate-500 hover:text-emerald-400 p-1.5 transition"><i class="fa-solid fa-pen text-xs"></i></button>
-                                <button type="button" onclick="event.preventDefault(); deleteCurrentLayer('${layer.name}')" class="text-slate-500 hover:text-red-400 p-1.5 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLayerDashboard('${layer.name}')" class="text-slate-500 hover:text-purple-400 p-1.5 transition"><i class="fa-solid fa-chart-pie text-xs"></i></button>
+                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openTable('${layer.name}')" class="text-slate-500 hover:text-blue-400 p-1.5 transition"><i class="fa-solid fa-table-list text-xs"></i></button>
+                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openEditModal('${layer.name}')" class="text-slate-500 hover:text-emerald-400 p-1.5 transition"><i class="fa-solid fa-pen text-xs"></i></button>
+                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); deleteCurrentLayer('${layer.name}')" class="text-slate-500 hover:text-red-400 p-1.5 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
                             </div>
                         </div>
                     </label>`;
             });
             fetchFeatures();
         }
+
+        window.toggleLayerVisibility = function(checkbox) { 
+            const layerName = checkbox.getAttribute('data-layer'); 
+            if(checkbox.checked) { map.addLayer(layerGroups[layerName]); layerVisibilityState[layerName] = true; } 
+            else { map.removeLayer(layerGroups[layerName]); layerVisibilityState[layerName] = false; }
+            localStorage.setItem('maechanLayerVisibility', JSON.stringify(layerVisibilityState));
+        };
 
         async function fetchFeatures() {
             Object.values(layerGroups).forEach(g => g.clearLayers());
@@ -268,7 +291,6 @@
                     const id = f.properties.id;
                     const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
                     
-                    // เพิ่ม Badge ระยะทาง/พื้นที่ กลับมาใน Popup
                     let badgeHtml = getMeasurementBadge(f);
 
                     let displayHtml = `<div class="p-1 min-w-[200px]" id="view_${id}">
@@ -394,7 +416,7 @@
             } catch (err) { alert(err.message); }
         }
 
-        // 📊 กู้คืนฟังก์ชันวิเคราะห์ และ แดชบอร์ด
+        // 📊 แดชบอร์ด & วิเคราะห์รัศมี
         window.drawCombinedAnalysis = function() {
             bufferGroup.clearLayers(); 
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
@@ -457,14 +479,14 @@
         }
         function drawEmptyChart(color, count) { const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); if(analyticsChartInstance) analyticsChartInstance.destroy(); analyticsChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); }
 
-        // 📋 กู้คืนฟังก์ชันตาราง
+        // 📋 ตาราง
         window.openTable = function(layerName) {
             const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) return;
             document.getElementById('current-table-layer').innerText = layerName;
             const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center">จัดการ</th></tr>'; head.innerHTML = headHtml;
             const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
             featuresInLayer.forEach(f => {
-                bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="map.closePopup(); map.flyTo([${f.geometry.coordinates[1]}, ${f.geometry.coordinates[0]}], 18)">`;
+                bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="map.closePopup(); map.flyTo([${f.geometry.coordinates[1] || f.geometry.coordinates[0][1]}, ${f.geometry.coordinates[0] || f.geometry.coordinates[0][0]}], 18)">`;
                 bodyHtml += `<td class="p-2 border-r text-center text-slate-400">${f.properties.id}</td>`;
                 if (layerInfo.fields) { layerInfo.fields.forEach(field => { bodyHtml += `<td class="p-2 border-r">${f.properties[field.name] || '-'}</td>`; }); }
                 bodyHtml += `<td class="p-2 text-center"><button onclick="event.stopPropagation(); deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button></td></tr>`;
@@ -475,7 +497,7 @@
         window.closeTable = function() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); }
         window.filterTable = function() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } }
 
-        // ระบบ จัดการ Layer และ นำเข้า/ส่งออก
+        // 🔄 ระบบนำเข้า / จัดการ
         window.importShpHandler = async function(event) {
             const file = event.target.files[0]; if (!file) return;
             let layerNamePrompt = prompt("ตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); if (!layerNamePrompt) { event.target.value = ''; return; }
