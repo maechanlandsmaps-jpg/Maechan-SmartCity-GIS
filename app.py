@@ -6,7 +6,7 @@ import os
 
 app = Flask(__name__)
 
-# ดึงค่า URL จาก Render Environment
+# เชื่อมต่อ Supabase
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
@@ -17,7 +17,6 @@ def init_db():
     try:
         conn = get_db_connection()
         c = conn.cursor()
-        # สร้างตารางถ้ายังไม่มี
         c.execute('''CREATE TABLE IF NOT EXISTS features
                      (id SERIAL PRIMARY KEY, layer_name TEXT, properties TEXT, geojson TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS layers
@@ -36,7 +35,7 @@ if DATABASE_URL:
 def index():
     return render_template('index.html')
 
-# --- API สำหรับ LAYERS ---
+# --- API สำหรับจัดการชั้นข้อมูล (Layers) ---
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
     conn = get_db_connection()
@@ -65,7 +64,6 @@ def add_layer():
         c.close()
         conn.close()
 
-# API ลบชั้นข้อมูล (ลบทั้งชั้นและพิกัดที่เกี่ยวข้อง)
 @app.route('/api/layers/<name>', methods=['DELETE'])
 def delete_layer(name):
     conn = None
@@ -82,7 +80,7 @@ def delete_layer(name):
     finally:
         if conn: conn.close()
 
-# --- API สำหรับ FEATURES ---
+# --- API สำหรับจัดการพิกัด (Features) ---
 @app.route('/api/features', methods=['GET'])
 def get_features():
     conn = get_db_connection()
@@ -112,7 +110,24 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
-# API ลบพิกัดรายจุด
+# 🔥 เพิ่ม API สำหรับการแก้ไขข้อมูล (PUT)
+@app.route('/api/features/<int:id>', methods=['PUT'])
+def update_feature(id):
+    data = request.json
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("UPDATE features SET properties = %s, geojson = %s WHERE id = %s", 
+                  (json.dumps(data.get('properties', {})), json.dumps(data.get('geojson')), id))
+        conn.commit()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        c.close()
+        conn.close()
+
 @app.route('/api/features/<int:id>', methods=['DELETE'])
 def delete_feature(id):
     conn = get_db_connection()
