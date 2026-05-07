@@ -89,11 +89,14 @@ def get_features():
     conn.close()
     features = []
     for row in rows:
-        f = json.loads(row[3])
-        f['properties'] = json.loads(row[2]) if row[2] else {}
-        f['properties']['id'] = row[0]
-        f['properties']['layer_name'] = row[1]
-        features.append(f)
+        try:
+            f = json.loads(row[3])
+            f['properties'] = json.loads(row[2]) if row[2] else {}
+            f['properties']['id'] = row[0]
+            f['properties']['layer_name'] = row[1]
+            features.append(f)
+        except Exception as e:
+            print("Error parsing feature:", e)
     return jsonify({"type": "FeatureCollection", "features": features})
 
 @app.route('/api/features', methods=['POST'])
@@ -108,7 +111,7 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
-# 🔥 ระบบอัปเดตข้อมูลที่แก้ไขให้ปลอดภัย พิกัดไม่หายแน่นอน
+# 🔥 ระบบอัปเดตข้อมูลที่ซ่อมจุดที่ทำให้พิกัดหาย
 @app.route('/api/features/<int:id>', methods=['PUT'])
 def update_feature(id):
     data = request.json
