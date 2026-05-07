@@ -28,7 +28,6 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; }
         
-        /* กรอบสีเขียวเวลาเลือกเลเยอร์ */
         .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
         
         #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
@@ -176,7 +175,7 @@
                     <h3 class="text-[10px] md:text-xs font-bold text-slate-500" id="chartLabel">สัดส่วนข้อมูลตาม:</h3>
                     <select id="analyticsFieldSelect" class="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-purple-500 bg-white max-w-[120px]" onchange="updateAnalyticsChart()"></select>
                 </div>
-                <div class="h-48 relative flex justify-center"><canvas id="layerAnalyticsChart"></canvas></div>
+                <div class="h-48 relative flex justify-center w-full"><canvas id="layerAnalyticsChart"></canvas></div>
             </div>
         </div>
     </div>
@@ -201,7 +200,7 @@
         L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
         map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
 
-        // 🧠 ระบบความจำ LocalStorage สำหรับการปิดตาเลเยอร์และการเลือกเลเยอร์
+        // 🧠 ระบบความจำ LocalStorage
         let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
         let activeLayerState = localStorage.getItem('maechanActiveLayer');
 
@@ -212,7 +211,7 @@
         let currentAnalyticsLayer = ''; 
         let bufferGroup = L.layerGroup().addTo(map);
 
-        // 📏 ฟังก์ชันคำนวณระยะทางและพื้นที่
+        // 📏 ฟังก์ชันคำนวณระยะทางและพื้นที่แบบแม่นยำ
         function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
         function formatArea(sqm) {
             const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4;
@@ -242,24 +241,25 @@
                 
                 let isRadioChecked = activeLayerState ? ((layer.name === activeLayerState) ? 'checked' : '') : ((index === 0) ? 'checked' : '');
 
+                // 🚀 แก้โครงสร้าง HTML ให้ปุ่มทำงานได้อิสระ ไม่โดนกดทับกัน
                 container.innerHTML += `
-                    <label class="block cursor-pointer group">
-                        <input type="radio" name="active_layer" value="${layer.name}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value)">
-                        <div class="flex items-center justify-between p-3 bg-slate-800 rounded-xl border-2 border-transparent transition group-hover:bg-slate-700 pr-1">
-                            <div class="flex items-center gap-2 md:gap-3">
-                                <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
-                                <span class="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis w-24 md:w-28" style="color: ${layer.color}" title="${layer.name}">
-                                    <i class="fa-solid fa-layer-group"></i> ${layer.name}
+                    <div class="relative group mb-2">
+                        <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value)">
+                        <div class="flex items-center justify-between p-2.5 bg-slate-800 rounded-xl border-2 border-transparent transition group-hover:bg-slate-700">
+                            <label for="radio_${index}" class="flex items-center gap-2 cursor-pointer flex-1 w-full overflow-hidden pr-2">
+                                <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle shrink-0" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
+                                <span class="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis" style="color: ${layer.color}" title="${layer.name}">
+                                    <i class="fa-solid fa-layer-group mr-1"></i>${layer.name}
                                 </span>
-                            </div>
-                            <div class="flex gap-1">
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLayerDashboard('${layer.name}')" class="text-slate-500 hover:text-purple-400 p-1.5 transition"><i class="fa-solid fa-chart-pie text-xs"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openTable('${layer.name}')" class="text-slate-500 hover:text-blue-400 p-1.5 transition"><i class="fa-solid fa-table-list text-xs"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openEditModal('${layer.name}')" class="text-slate-500 hover:text-emerald-400 p-1.5 transition"><i class="fa-solid fa-pen text-xs"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); deleteCurrentLayer('${layer.name}')" class="text-slate-500 hover:text-red-400 p-1.5 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                            </label>
+                            <div class="flex gap-0.5 shrink-0 z-10 relative">
+                                <button type="button" onclick="openLayerDashboard('${layer.name}')" class="text-slate-400 hover:text-purple-400 p-1.5 rounded hover:bg-slate-900 transition" title="แดชบอร์ด"><i class="fa-solid fa-chart-pie text-xs"></i></button>
+                                <button type="button" onclick="openTable('${layer.name}')" class="text-slate-400 hover:text-blue-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตารางข้อมูล"><i class="fa-solid fa-table-list text-xs"></i></button>
+                                <button type="button" onclick="openEditModal('${layer.name}')" class="text-slate-400 hover:text-emerald-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตั้งค่าเลเยอร์"><i class="fa-solid fa-pen text-xs"></i></button>
+                                <button type="button" onclick="deleteCurrentLayer('${layer.name}')" class="text-slate-400 hover:text-red-400 p-1.5 rounded hover:bg-slate-900 transition" title="ลบเลเยอร์"><i class="fa-solid fa-trash-can text-xs"></i></button>
                             </div>
                         </div>
-                    </label>`;
+                    </div>`;
             });
             fetchFeatures();
         }
@@ -479,25 +479,33 @@
         }
         function drawEmptyChart(color, count) { const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); if(analyticsChartInstance) analyticsChartInstance.destroy(); analyticsChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); }
 
-        // 📋 ตาราง
+        // 📋 ตาราง (แก้บั๊กกดไม่ได้)
         window.openTable = function(layerName) {
             const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) return;
             document.getElementById('current-table-layer').innerText = layerName;
+            
             const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center">จัดการ</th></tr>'; head.innerHTML = headHtml;
+            
             const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
+            
             featuresInLayer.forEach(f => {
-                bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="map.closePopup(); map.flyTo([${f.geometry.coordinates[1] || f.geometry.coordinates[0][1]}, ${f.geometry.coordinates[0] || f.geometry.coordinates[0][0]}], 18)">`;
+                // คำนวณหาจุดกึ่งกลาง (Centroid) เพื่อให้เวลาคลิกตารางแล้วแผนที่ซูมไปหาได้ถูกจุดเสมอ (ไม่ว่าจะเป็นเส้น หรือ รูปร่าง)
+                let lat = 20.1525, lng = 99.8475;
+                try { const centroid = turf.centroid(f); lng = centroid.geometry.coordinates[0]; lat = centroid.geometry.coordinates[1]; } catch(e) {}
+
+                bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="map.closePopup(); map.flyTo([${lat}, ${lng}], 18)">`;
                 bodyHtml += `<td class="p-2 border-r text-center text-slate-400">${f.properties.id}</td>`;
                 if (layerInfo.fields) { layerInfo.fields.forEach(field => { bodyHtml += `<td class="p-2 border-r">${f.properties[field.name] || '-'}</td>`; }); }
                 bodyHtml += `<td class="p-2 text-center"><button onclick="event.stopPropagation(); deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button></td></tr>`;
             });
             body.innerHTML = bodyHtml || `<tr><td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">ไม่มีข้อมูล</td></tr>`;
+            
             panel.classList.add('open'); mapEl.style.height = window.innerWidth < 768 ? '55vh' : '65vh'; setTimeout(() => map.invalidateSize(), 300);
         }
         window.closeTable = function() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); }
         window.filterTable = function() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } }
 
-        // 🔄 ระบบนำเข้า / จัดการ
+        // 🔄 ระบบนำเข้า / จัดการ เลเยอร์
         window.importShpHandler = async function(event) {
             const file = event.target.files[0]; if (!file) return;
             let layerNamePrompt = prompt("ตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); if (!layerNamePrompt) { event.target.value = ''; return; }
@@ -546,11 +554,23 @@
             const c = document.getElementById('fields_container');
             c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"><input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500"><option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash"></i></button></div>`;
         }
-        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+        
+        // 🚀 แก้ไขฟังก์ชันการเปิด Modal ให้ชัวร์ว่าไม่หายไปเพราะโปร่งใส
+        window.toggleModal = function(id) { 
+            const modal = document.getElementById(id);
+            if(modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+            } else {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        }
+        
         window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ'); addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
         window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal'); }
         window.saveLayer = async function(e) { e.preventDefault(); const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value; const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) }); toggleModal('layerModal'); fetchLayers(); }
-        window.deleteCurrentLayer = async function() { const name = document.getElementById('edit_layer_name_old').value; if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); location.reload(); } }
+        window.deleteCurrentLayer = async function(name) { if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); location.reload(); } }
         window.deleteFeature = async function(id) { if (confirm('คุณต้องการลบพิกัดนี้ใช่หรือไม่?')) { await fetch(`/api/features/${id}`, { method: 'DELETE' }); fetchFeatures(); map.closePopup(); } }
         window.exportGeoJSON = function() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures })); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); };
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); }
