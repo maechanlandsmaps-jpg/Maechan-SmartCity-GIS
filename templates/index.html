@@ -26,96 +26,81 @@
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; }
     </style>
 </head>
-<body class="flex h-screen bg-slate-100">
+<body class="flex h-screen bg-slate-100 relative">
 
-    <aside id="sidebar" class="w-80 bg-slate-900 text-white flex flex-col shadow-2xl z-[60] relative h-full shrink-0 border-r border-slate-800">
-        <div class="p-6 border-b border-slate-800">
-            <h1 class="text-xl font-bold text-emerald-400 flex items-center gap-3">
-                <i class="fa-solid fa-map-location-dot"></i> Maechan GIS
-            </h1>
-            <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">Smart City Data Platform</p>
+    <div id="mobile-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] hidden md:hidden opacity-0 transition-opacity duration-300"></div>
+
+    <aside id="sidebar" class="w-80 bg-slate-900 text-white flex flex-col shadow-2xl z-[60] fixed md:relative h-full shrink-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
+        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+            <div>
+                <h1 class="text-xl font-bold text-emerald-400 flex items-center gap-3">
+                    <i class="fa-solid fa-map-location-dot"></i> Maechan GIS
+                </h1>
+                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">Smart City Data Platform</p>
+            </div>
+            <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white p-1">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
         </div>
         
         <div class="flex-1 p-4 flex flex-col overflow-hidden">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">ชั้นข้อมูล (LAYERS)</h2>
-                <button onclick="openAddLayerModal()" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-md font-bold shadow-md transition">
-                    <i class="fa-solid fa-plus"></i> เพิ่ม
-                </button>
+            <div class="flex flex-col gap-3 mb-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">ชั้นข้อมูล (Layers)</h2>
+                    <button onclick="openAddLayerModal()" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-md transition font-bold shadow-md">
+                        <i class="fa-solid fa-plus"></i> เพิ่ม
+                    </button>
+                </div>
             </div>
-            
-            <div id="layer-container" class="space-y-3 overflow-y-auto flex-1 hide-scrollbar">
-                <div class="text-center text-slate-500 mt-10"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูล...</div>
+            <div class="space-y-3 overflow-y-auto flex-1 hide-scrollbar" id="layer-container">
+                <div class="text-center text-slate-500 text-sm mt-10"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูล...</div>
             </div>
         </div>
 
         <div class="p-4 border-t border-slate-800 bg-slate-800/50">
-            <div class="grid grid-cols-2 gap-2">
-                <button onclick="exportGeoJSON()" class="bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold py-3 rounded-lg border border-slate-700 transition">
-                    <i class="fa-solid fa-download mr-1"></i> ส่งออก
-                </button>
-                <button onclick="document.getElementById('importFile').click()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold py-3 rounded-lg border border-slate-700 transition">
-                    <i class="fa-solid fa-upload mr-1"></i> นำเข้า
-                </button>
+            <button onclick="exportGeoJSON()" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm mb-2"><i class="fa-solid fa-download mr-1"></i> ส่งออกข้อมูลทั้งหมด</button>
+            <div class="flex gap-2">
+                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> นำเข้า JSON</button>
+                <button onclick="document.getElementById('importShp').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-file-zipper mr-1"></i> นำเข้า SHP (.zip)</button>
+                <input type="file" id="importFile" accept=".geojson,.json" class="hidden" onchange="importFileHandler(event)">
+                <input type="file" id="importShp" accept=".zip" class="hidden" onchange="importShpHandler(event)">
             </div>
-            <input type="file" id="importFile" accept=".json,.geojson,.zip,.shp" class="hidden" onchange="importFileHandler(event)">
-            
-            <button onclick="location.reload()" class="w-full mt-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] font-bold py-2 rounded transition">
-                <i class="fa-solid fa-rotate mr-1"></i> รีเฟรชข้อมูล
-            </button>
         </div>
     </aside>
 
-    <main class="flex-1 relative z-10 w-full">
+    <main class="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
+        <button onclick="toggleSidebar()" class="md:hidden absolute top-4 right-4 z-[40] bg-white text-slate-800 w-10 h-10 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+
         <div id="map"></div>
     </main>
-
-    <div id="layerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-5 border-b pb-3">
-                <h2 class="text-lg font-bold text-slate-800" id="modalTitle">สร้างชั้นข้อมูลใหม่</h2>
-                <button onclick="toggleModal('layerModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <form onsubmit="saveLayer(event)" class="space-y-4">
-                <input type="hidden" id="edit_layer_name_old">
-                <div><label class="block text-xs font-bold text-slate-600 mb-1">ชื่อชั้นข้อมูล</label><input type="text" id="new_layer_name" required class="w-full border rounded-lg p-2.5 text-sm outline-none focus:border-emerald-500"></div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-slate-600 mb-1">สีสัญลักษณ์</label><input type="color" id="new_layer_color" value="#10b981" class="w-full h-10 rounded-lg cursor-pointer border-0 p-0"></div>
-                    <div><label class="block text-xs font-bold text-slate-600 mb-1">ประเภท</label><select id="new_layer_type" class="w-full border rounded-lg p-2.5 text-sm bg-white"><option value="Point">จุด (Marker)</option><option value="Line">เส้น / รูปปิด</option></select></div>
-                </div>
-                
-                <div class="pt-4 border-t border-slate-100">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block text-xs font-bold text-slate-600">ฟิลด์ข้อมูลเพิ่มเติม (Attributes)</label>
-                        <button type="button" onclick="addFieldRow()" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold"><i class="fa-solid fa-plus"></i> เพิ่มฟิลด์</button>
-                    </div>
-                    <div id="fields_container" class="space-y-2"></div>
-                </div>
-
-                <div class="flex flex-col gap-2 pt-4">
-                    <button type="submit" class="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-sm shadow-md transition hover:bg-emerald-600">บันทึกชั้นข้อมูล</button>
-                    <button type="button" id="btnDeleteLayer" onclick="deleteCurrentLayer()" class="hidden w-full bg-red-50 text-red-500 font-bold py-2.5 rounded-lg text-sm border border-red-100 hover:bg-red-500 hover:text-white transition">ลบชั้นข้อมูลนี้ทิ้ง</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <div id="loadingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] hidden flex items-center justify-center">
         <div class="bg-white rounded-xl p-6 flex flex-col items-center shadow-2xl m-4 text-center">
             <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
             <p class="font-bold text-slate-700">กำลังประมวลผล...</p>
-            <p class="text-xs text-slate-500 mt-1">โปรดรอสักครู่</p>
+            <p class="text-xs text-slate-500 mt-1">โปรดรอสักครู่ ระบบกำลังจัดกลุ่มข้อมูล</p>
         </div>
     </div>
 
     <script>
-        // 🌍 1. กลับมาแล้ว! ภาพถ่ายดาวเทียมสุดคมชัด
+        // 🌍 1. แก้ปัญหารูปแบบแผนที่/grid: จำกัด MaxZoom ของแผนที่ esri ดาวเทียม
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
+            maxZoom: 19, // จำกัดการซูมไม่ให้เกินระดับ 19
+            maxNativeZoom: 18 // จำกัดการดึงภาพจาก esri แค่ระดับ 18 (เพื่อให้ Leaflet ขยายภาพแทนการดึงภาพที่ไม่มีจริง)
+        });
 
-        const map = L.map('map', { center: [20.1525, 99.8475], zoom: 15, layers: [osmLayer], zoomControl: false });
+        const map = L.map('map', { 
+            center: [20.1525, 99.8475], 
+            zoom: 15, 
+            layers: [osmLayer], 
+            zoomControl: false,
+            maxZoom: 19 // จำกัดการซูมรวมของแผนที่ทั้งใบ
+        });
         L.control.zoom({ position: 'topleft' }).addTo(map);
-        L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Satellite)": satelliteLayer }, null, {position: 'bottomright'}).addTo(map);
+        L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ภาพถ่ายดาวเทียม": satelliteLayer }, null, {position: 'bottomright'}).addTo(map);
         map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
 
         let appLayers = [];
@@ -138,7 +123,7 @@
                                 <input type="radio" name="active_layer" value="${layer.name}" checked class="w-4 h-4 accent-emerald-500">
                                 <span class="text-sm font-medium" style="color: ${layer.color}"><i class="fa-solid fa-layer-group"></i> ${layer.name}</span>
                             </div>
-                            <button type="button" onclick="event.preventDefault(); openEditModal('${layer.name}')" class="text-slate-500 hover:text-emerald-400 p-1 transition"><i class="fa-solid fa-pen text-xs"></i></button>
+                            <button type="button" onclick="event.preventDefault(); deleteCurrentLayer('${layer.name}')" class="text-slate-500 hover:text-red-400 p-1.5 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
                         </div>
                     </label>`;
             });
@@ -150,7 +135,6 @@
             const res = await fetch('/api/features');
             const data = await res.json();
             allFeatures = data.features;
-            
             L.geoJSON(data, {
                 pointToLayer: (f, latlng) => {
                     const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
@@ -162,203 +146,89 @@
                     return { color: lInfo ? lInfo.color : '#3388ff', weight: 4 };
                 },
                 onEachFeature: (f, layer) => {
-                    const id = f.properties.id;
-                    const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
-                    
-                    // 🌟 ดีไซน์ Popup แบบใหม่ มีปุ่มสลับ โหมดดู <-> โหมดแก้ไข
-                    let displayHtml = `<div class="p-1 min-w-[200px]" id="view_${id}">
-                        <h3 class="font-bold border-b pb-1 mb-2 text-emerald-600">${f.properties.layer_name || 'ข้อมูล'}</h3>
-                        <div class="text-xs mb-3 space-y-1">`;
-                    
-                    let editHtml = `<div class="p-1 min-w-[200px] hidden" id="edit_${id}">
-                        <h3 class="font-bold border-b pb-1 mb-2 text-amber-500"><i class="fa-solid fa-pen mr-1"></i>แก้ไขข้อมูล</h3>
-                        <div class="text-xs mb-3 space-y-2">`;
-
-                    if(lInfo && lInfo.fields) {
-                        lInfo.fields.forEach(field => {
-                            const val = f.properties[field.name] || '';
-                            const iType = field.type === 'Number' ? 'number' : (field.type === 'Date' ? 'date' : 'text');
-                            displayHtml += `<p><span class="font-bold text-slate-500">${field.name}:</span> ${val}</p>`;
-                            editHtml += `<div><label class="block font-bold text-slate-500 mb-1">${field.name}</label><input type="${iType}" id="input_${id}_${field.name}" value="${val}" class="w-full border rounded px-2 py-1 outline-none focus:border-amber-500"></div>`;
-                        });
-                    }
-
-                    // ปุ่มสำหรับหน้าแสดงผล
-                    displayHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2">
-                        <button onclick="toggleEdit(${id})" class="flex-1 bg-amber-50 text-amber-600 py-1.5 rounded text-[10px] font-bold border border-amber-100 hover:bg-amber-500 hover:text-white transition"><i class="fa-solid fa-pen"></i> แก้ไข</button>
-                        <button onclick="deleteFeature(${id})" class="flex-1 bg-red-50 text-red-500 py-1.5 rounded text-[10px] font-bold border border-red-100 hover:bg-red-500 hover:text-white transition"><i class="fa-solid fa-trash"></i> ลบพิกัด</button>
-                    </div></div>`;
-                    
-                    // ปุ่มสำหรับหน้าแก้ไข
-                    editHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2">
-                        <button onclick="toggleEdit(${id})" class="flex-1 bg-slate-100 text-slate-600 py-1.5 rounded text-[10px] font-bold hover:bg-slate-200 transition">ยกเลิก</button>
-                        <button onclick="updateFeature(${id}, event)" class="flex-1 bg-amber-500 text-white py-1.5 rounded text-[10px] font-bold shadow-md hover:bg-amber-600 transition"><i class="fa-solid fa-save"></i> บันทึก</button>
-                    </div></div>`;
-
-                    layer.bindPopup(`<div>${displayHtml}${editHtml}</div>`);
+                    let customPropsHtml = '';
+                    for(let key in f.properties) { if(!['id', 'layer_name'].includes(key)) customPropsHtml += `<p><span class="font-bold">${key}:</span> ${f.properties[key]}</p>`; }
+                    layer.bindPopup(`<div class="p-2"><h3 class="font-bold border-b mb-2">${f.properties.layer_name}</h3><div class="text-xs mb-3 space-y-1">${customPropsHtml || '<p class="text-slate-500 italic">ไม่มีข้อมูลเพิ่มเติม</p>'}</div><button onclick="deleteFeature(${f.properties.id})" class="w-full bg-red-50 text-red-500 py-1 rounded text-xs font-bold border border-red-100 hover:bg-red-500 hover:text-white transition"><i class="fa-solid fa-trash-can"></i> ลบพิกัดนี้</button></div>`);
                     if (layerGroups[f.properties.layer_name]) layerGroups[f.properties.layer_name].addLayer(layer);
                 }
             });
         }
 
-        // ✏️ ฟังก์ชันสลับหน้าต่าง แก้ไข
-        window.toggleEdit = function(id) {
-            document.getElementById(`view_${id}`).classList.toggle('hidden');
-            document.getElementById(`edit_${id}`).classList.toggle('hidden');
-        };
+        map.pm.setLang('th');
+        map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
 
-        // 🚀 ฟังก์ชันบันทึกการแก้ไข (ส่งพิกัด GeoJSON กลับไปด้วย แก้ปัญหาหมุดหาย 100%)
-        window.updateFeature = async function(id, btnEvent) {
-            const feature = allFeatures.find(f => f.properties.id === id);
-            const props = { ...feature.properties };
-            
-            // ดึงค่าใหม่ที่กรอก
-            const lInfo = appLayers.find(l => l.name === feature.properties.layer_name);
-            if(lInfo && lInfo.fields) {
-                lInfo.fields.forEach(f => {
-                    const el = document.getElementById(`input_${id}_${f.name}`);
-                    if(el) props[f.name] = el.value;
-                });
-            }
-            
-            // จัดการข้อมูลส่งกลับ (นำ feature.geometry ส่งกลับไปด้วย หมุดจะได้ไม่หาย)
-            const geojsonData = { type: "Feature", geometry: feature.geometry, properties: props };
-
-            btnEvent.target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> บันทึก...';
-
-            await fetch(`/api/features/${id}`, { 
-                method: 'PUT', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ properties: props, geojson: geojsonData }) 
-            });
-            
-            map.closePopup();
-            fetchFeatures();
-        };
-
-        window.deleteFeature = async function(id) {
-            if (confirm('ลบพิกัดนี้ถาวรใช่หรือไม่?')) {
-                await fetch(`/api/features/${id}`, { method: 'DELETE' });
-                fetchFeatures(); map.closePopup();
-            }
-        };
-
-        // ฟอร์มเพิ่มข้อมูลเมื่อปักหมุด
         map.on('pm:create', async (e) => {
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
-            if (!activeRadio) { alert("กรุณาสร้างชั้นข้อมูลก่อนครับ"); e.layer.remove(); return; }
+            if (!activeRadio) { alert("กรุณาสร้างหรือเลือกชั้นข้อมูลก่อนครับ"); e.layer.remove(); return; }
             const lInfo = appLayers.find(l => l.name === activeRadio.value);
             
-            let formHtml = `<div class="p-2 min-w-[200px]">
-                <div class="mb-3"><span class="text-[10px] font-bold text-white px-2 py-1 rounded uppercase bg-emerald-500">${lInfo.name}</span></div>`;
+            let tempLayer = e.layer;
+            if (e.shape === "Marker") {
+                const latlng = tempLayer.getLatLng(); map.removeLayer(tempLayer);
+                tempLayer = L.circleMarker(latlng, { color: lInfo.color, radius: 8, fillColor: lInfo.color, fillOpacity: 0.8 }).addTo(map);
+            } else { tempLayer.setStyle({ color: lInfo.color, weight: 4 }); }
             
-            lInfo.fields.forEach(f => {
-                let iType = f.type === 'Number' ? 'number' : (f.type === 'Date' ? 'date' : 'text');
-                formHtml += `<div><label class="block text-[10px] font-bold text-slate-600 mb-1">${f.name}</label>
-                             <input type="${iType}" id="new_f_${f.name}" class="w-full border rounded p-1.5 mb-2 text-xs outline-none focus:border-emerald-500"></div>`;
-            });
-            
-            formHtml += `<div class="flex gap-2 mt-2">
-                <button onclick="map.closePopup(); map.removeLayer(window.tempLayer)" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button>
-                <button onclick="confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-blue-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button>
-            </div></div>`;
-            
-            window.tempLayer = e.layer;
-            e.layer.bindPopup(formHtml).openPopup();
+            let properties = {};
+            if(confirm(`ต้องการบันทึกพิกัดนี้ลงในชั้นข้อมูล "${lInfo.name}" ใช่หรือไม่?`)) {
+                const geojson = tempLayer.toGeoJSON();
+                const response = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: lInfo.name, properties: properties, geojson: geojson }) });
+                const data = await response.json();
+                if(data.status === "success") { alert("บันทึกสำเร็จ"); tempLayer.remove(); fetchFeatures(); } else { alert(data.message); tempLayer.remove(); }
+            } else { tempLayer.remove(); }
         });
 
-        window.confirmSaveNewFeature = async function(layerName) {
-            const lInfo = appLayers.find(l => l.name === layerName);
-            const properties = {};
-            lInfo.fields.forEach(f => { properties[f.name] = document.getElementById(`new_f_${f.name}`).value; });
-            
-            const geojson = window.tempLayer.toGeoJSON ? window.tempLayer.toGeoJSON() : { type: "Feature", geometry: { type: "Point", coordinates: [window.tempLayer.getLatLng().lng, window.tempLayer.getLatLng().lat] } };
-            
-            document.querySelector('.leaflet-popup-content').innerHTML = '<div class="text-center p-4"><i class="fa-solid fa-spinner fa-spin text-blue-500 text-xl"></i></div>';
-            
-            await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: properties, geojson: geojson }) });
-            window.tempLayer.remove(); fetchFeatures();
-        }
-
-        // ระบบเพิ่ม/ลบ Layer
-        function addFieldRow(name = '', type = 'Text') {
-            const c = document.getElementById('fields_container');
-            c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200">
-                <input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500">
-                <select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500">
-                    <option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option>
-                </select>
-                <button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash"></i></button></div>`;
-        }
-
-        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
-        window.openAddLayerModal = function() { 
-            document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; 
-            document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = '';
-            document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ'); addFieldRow('รายละเอียด');
-            document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); 
-        }
-        window.openEditModal = function(name) {
-            const l = appLayers.find(layer => layer.name === name);
-            document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล";
-            document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name;
-            document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type;
-            document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type));
-            document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal');
-        }
-
-        window.saveLayer = async function(e) {
-            e.preventDefault();
-            const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value;
-            const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value}));
-            await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) });
-            toggleModal('layerModal'); fetchLayers();
-        }
-
-        window.deleteCurrentLayer = async function() {
-            const name = document.getElementById('edit_layer_name_old').value;
-            if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) {
-                await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); location.reload();
-            }
-        }
-
-        // ระบบนำเข้าและส่งออก
-        window.exportGeoJSON = function() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures }));
-            const el = document.createElement('a'); el.setAttribute("href", dataStr); el.setAttribute("download", "Maechan_Data.geojson");
-            document.body.appendChild(el); el.click(); el.remove();
-        };
-
-        window.importFileHandler = async function(event) {
+        // 🚀 2. แก้ปัญหานำเข้า Error: Multiple geometry types: แยกรูปทรงข้อมูลออกจากกัน
+        window.importShpHandler = async function(event) {
             const file = event.target.files[0]; if (!file) return;
-            const ext = file.name.split('.').pop().toLowerCase(); 
-            let layerName = prompt("ตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); 
-            if (!layerName) { event.target.value = ''; return; }
-            
+            let layerNamePrompt = prompt("ตั้งชื่อชั้นข้อมูลพื้นฐานสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); if (!layerNamePrompt) { event.target.value = ''; return; }
             document.getElementById('loadingModal').classList.remove('hidden');
             try {
-                let geojson = null;
-                if (['json', 'geojson'].includes(ext)) { geojson = JSON.parse(await file.text()); } 
-                else if (['zip', 'shp'].includes(ext)) { 
-                    geojson = await shp(await file.arrayBuffer()); 
-                    if (Array.isArray(geojson)) { let c = []; geojson.forEach(g => c = c.concat(g.features)); geojson = { type: "FeatureCollection", features: c }; } 
-                } 
-                else { throw new Error("ไม่รองรับไฟล์นี้"); }
+                // 1. อ่านไฟล์ zip และแปลงเป็น GeoJSON
+                const geojsonAll = await shp(await file.arrayBuffer());
                 
-                if (!geojson || !geojson.features) throw new Error("ไฟล์ไม่ถูกต้อง");
-                
-                let autoFields = [];
-                if(geojson.features.length > 0) { for(let key in geojson.features[0].properties) { if(key !== 'layer_name') autoFields.push({name: key, type: 'Text'}); } }
-                
-                await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: layerName, color: '#3b82f6', type: geojson.features[0].geometry.type === 'Point' ? 'Point' : 'Line', fields: autoFields }) });
-                
-                for(let f of geojson.features) {
-                    await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: f.properties, geojson: f.geometry }) });
+                // 2. แยกข้อมูลรูปทรงแต่ละประเภทออกจากกัน
+                let featuresByGeometry = { 'Point': [], 'LineString': [], 'Polygon': [], 'MultiPoint': [], 'MultiLineString': [], MultiPolygon: [] };
+                let featuresToIgnore = [];
+
+                geojsonAll.features.forEach(f => {
+                    if (featuresByGeometry[f.geometry.type]) { featuresByGeometry[f.geometry.type].push(f); } 
+                    else { featuresToIgnore.push(f); } // จัดการกับประเภทอื่นๆ (ถ้ามี)
+                });
+
+                // 3. จัดการนำเข้าข้อมูลแต่ละรูปทรงที่แยกมาแล้ว
+                for (let geomType in featuresByGeometry) {
+                    const features = featuresByGeometry[geomType];
+                    if (features.length === 0) continue;
+
+                    let newLayerName = `${layerNamePrompt}_${geomType}`; // สร้างชื่อชั้นข้อมูลใหม่ตามประเภทรูปทรง
+                    let color = `#${Math.floor(Math.random()*16777215).toString(16)}`; // สุ่มสี
+
+                    // สกัดฟิลด์ข้อมูล
+                    let autoFields = [];
+                    for(let key in features[0].properties) { autoFields.push({name: key, type: 'Text'}); }
+
+                    // 3.1 สร้างชั้นข้อมูลใหม่ (สำหรับแต่ละประเภทรูปทรง)
+                    await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newLayerName, color: color, type: (geomType.includes('Point') ? 'Point' : 'Line'), fields: autoFields }) });
+                    
+                    // 3.2 บันทึกพิกัดข้อมูลทั้งหมดลงในชั้นข้อมูลใหม่นั้น
+                    for(let feature of features) {
+                        feature.properties.layer_name = newLayerName; // ล็อกชื่อชั้นข้อมูลใน properties
+                        await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: newLayerName, properties: feature.properties, geojson: feature.geometry }) });
+                    }
                 }
-                alert("นำเข้าข้อมูลสำเร็จ!"); fetchLayers();
-            } catch (err) { alert("Error: " + err.message); } 
-            finally { document.getElementById('loadingModal').classList.add('hidden'); event.target.value = ''; }
+
+                alert(`นำเข้าข้อมูลและแยกชั้นข้อมูลตามรูปทรงเรียบร้อยแล้วครับ! (กรุณากด F5 รีเฟรชเพื่อความชัวร์)`);
+                location.reload();
+            } catch (err) { alert("Error: " + err.message); console.error(err); } finally { document.getElementById('loadingModal').classList.add('hidden'); event.target.value = ''; }
         };
+
+        // UI Helpers
+        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+        window.openAddLayerModal = function() { toggleSidebar(); alert("กรุณาใช้ฟังก์ชันนำเข้า JSON หรือ SHP ด้านล่างเพื่อเพิ่มชั้นข้อมูลพร้อมข้อมูลครับ"); }
+        async function deleteCurrentLayer(name) { if (confirm(`คุณต้องการลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ใช่หรือไม่?`)) { await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); location.reload(); } }
+        async function deleteFeature(id) { if (confirm('คุณต้องการลบพิกัดนี้ใช่หรือไม่?')) { await fetch(`/api/features/${id}`, { method: 'DELETE' }); fetchFeatures(); map.closePopup(); } }
+        window.exportGeoJSON = function() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures })); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); };
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); }
 
         fetchLayers();
     </script>
