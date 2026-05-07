@@ -111,7 +111,6 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
-# ✅ ระบบอัปเดตข้อมูลที่ซ่อมจุดที่ทำให้พิกัดหาย
 @app.route('/api/features/<int:id>', methods=['PUT'])
 def update_feature(id):
     data = request.json
