@@ -35,7 +35,6 @@ if DATABASE_URL:
 def index():
     return render_template('index.html')
 
-# --- API สำหรับจัดการชั้นข้อมูล (Layers) ---
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
     conn = get_db_connection()
@@ -80,7 +79,6 @@ def delete_layer(name):
     finally:
         if conn: conn.close()
 
-# --- API สำหรับจัดการพิกัด (Features) ---
 @app.route('/api/features', methods=['GET'])
 def get_features():
     conn = get_db_connection()
@@ -110,15 +108,19 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
-# 🔥 เพิ่ม API สำหรับการแก้ไขข้อมูล (PUT)
+# 🔥 ระบบอัปเดตข้อมูลที่แก้ไขให้ปลอดภัย พิกัดไม่หายแน่นอน
 @app.route('/api/features/<int:id>', methods=['PUT'])
 def update_feature(id):
     data = request.json
     conn = get_db_connection()
     c = conn.cursor()
     try:
-        c.execute("UPDATE features SET properties = %s, geojson = %s WHERE id = %s", 
-                  (json.dumps(data.get('properties', {})), json.dumps(data.get('geojson')), id))
+        if 'geojson' in data and data['geojson'] is not None:
+            c.execute("UPDATE features SET properties = %s, geojson = %s WHERE id = %s", 
+                      (json.dumps(data.get('properties', {})), json.dumps(data.get('geojson')), id))
+        else:
+            c.execute("UPDATE features SET properties = %s WHERE id = %s", 
+                      (json.dumps(data.get('properties', {})), id))
         conn.commit()
         return jsonify({"status": "success"})
     except Exception as e:
