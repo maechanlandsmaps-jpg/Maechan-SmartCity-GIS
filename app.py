@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from Flask import Flask, render_template, request, jsonify
 import psycopg2
 from psycopg2 import errors
 import json
@@ -111,7 +111,7 @@ def save_feature():
     conn.close()
     return jsonify({"status": "success"})
 
-# 🔥 ระบบอัปเดตข้อมูลที่ซ่อมจุดที่ทำให้พิกัดหาย
+# ✅ ระบบอัปเดตข้อมูลที่ซ่อมจุดที่ทำให้พิกัดหาย
 @app.route('/api/features/<int:id>', methods=['PUT'])
 def update_feature(id):
     data = request.json
