@@ -1,4 +1,4 @@
-from Flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify
 import psycopg2
 from psycopg2 import errors
 import json
