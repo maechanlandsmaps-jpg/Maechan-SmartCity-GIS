@@ -10,26 +10,11 @@ app = Flask(__name__)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+    # 🔥 เพิ่ม connect_timeout=5 เพื่อให้มันเลิกรอถ้านานเกินไป เซิร์ฟเวอร์จะได้ไม่ล่มตอน Render ตรวจสอบ
+    return psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=5)
 
-def init_db():
-    conn = None
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS features
-                     (id SERIAL PRIMARY KEY, layer_name TEXT, properties TEXT, geojson TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS layers
-                     (id SERIAL PRIMARY KEY, name TEXT UNIQUE, color TEXT, type TEXT, fields TEXT)''')
-        conn.commit()
-    except Exception as e:
-        print(f"DB Init Error: {e}")
-    finally:
-        if conn: conn.close()
-
-if DATABASE_URL:
-    try: init_db()
-    except: pass
+# ✂️ ดิฉันตัดฟังก์ชัน init_db() ตอนเปิดเว็บออกไปแล้วครับ 
+# เพราะเราสร้างตารางไปหมดแล้ว ไม่จำเป็นต้องให้เซิร์ฟเวอร์เสียเวลารอเช็กซ้ำทุกครั้งที่โหลดใหม่ครับ
 
 @app.route('/')
 def index():
