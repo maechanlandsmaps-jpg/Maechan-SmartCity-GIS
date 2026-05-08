@@ -218,51 +218,29 @@
         L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
         map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
 
-        // 🔴 ระบบ Highlight สีแดงเมื่อคลิกเส้น/จุด
+        // 🔴 ระบบ Highlight สีแดงเวลาคลิกดูข้อมูล
         let highlightedLayer = null;
         let highlightedOriginalStyle = null;
 
-        // เมื่อคลิกเปิด Popup (ไม่ว่าจะบนแผนที่ หรือกดจากตาราง)
         map.on('popupopen', function(e) {
             const layer = e.popup._source;
-            if (!layer || !layer.setStyle) return; // ทำงานเฉพาะ Layer ที่เปลี่ยนสีได้
-
-            // คืนค่าสีให้เส้น/จุดเก่าก่อน (ถ้ามี)
-            if (highlightedLayer && highlightedOriginalStyle) {
-                highlightedLayer.setStyle(highlightedOriginalStyle);
-            }
+            if (!layer || !layer.setStyle) return; 
+            if (highlightedLayer && highlightedOriginalStyle) { highlightedLayer.setStyle(highlightedOriginalStyle); }
 
             highlightedLayer = layer;
-            // จำค่าสีและความหนาเดิมไว้
-            highlightedOriginalStyle = {
-                color: layer.options.color,
-                fillColor: layer.options.fillColor,
-                weight: layer.options.weight || 4
-            };
-
-            // เปลี่ยนสีเป็นสีแดงให้เด่นชัด
-            layer.setStyle({
-                color: '#ef4444', // สีแดง (Tailwind red-500)
-                fillColor: '#ef4444',
-                weight: 6 // เพิ่มความหนาของเส้นให้เห็นชัดเจนขึ้น
-            });
-
-            // ดึงเส้นขึ้นมาไว้ข้างบนสุด จะได้ไม่โดนเส้นอื่นทับ
-            if (layer.bringToFront) {
-                layer.bringToFront();
-            }
+            highlightedOriginalStyle = { color: layer.options.color, fillColor: layer.options.fillColor, weight: layer.options.weight || 4 };
+            
+            layer.setStyle({ color: '#ef4444', fillColor: '#ef4444', weight: 6 });
+            if (layer.bringToFront) { layer.bringToFront(); }
         });
 
-        // เมื่อปิด Popup (คืนค่าสีเดิม)
         map.on('popupclose', function(e) {
             if (highlightedLayer && highlightedOriginalStyle) {
                 highlightedLayer.setStyle(highlightedOriginalStyle);
-                highlightedLayer = null;
-                highlightedOriginalStyle = null;
+                highlightedLayer = null; highlightedOriginalStyle = null;
             }
         });
 
-        // ตัวแปรระบบ
         let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
         let activeLayerState = localStorage.getItem('maechanActiveLayer');
         let labelFieldState = JSON.parse(localStorage.getItem('maechanLabelFieldState')) || {};
@@ -287,6 +265,7 @@
                 let checkedAttr = isVisible ? 'checked' : '';
                 if (isVisible && !map.hasLayer(layerGroups[layer.name])) { map.addLayer(layerGroups[layer.name]); }
                 else if (!isVisible && map.hasLayer(layerGroups[layer.name])) { map.removeLayer(layerGroups[layer.name]); }
+                
                 let isRadioChecked = activeLayerState ? ((layer.name === activeLayerState) ? 'checked' : '') : ((index === 0) ? 'checked' : '');
                 let labelIsActive = !!labelFieldState[layer.name];
                 let labelBtnColor = labelIsActive ? 'text-amber-400' : 'text-slate-400';
@@ -362,7 +341,25 @@
                         const text = fieldName === 'id' ? String(id) : (f.properties[fieldName] ? String(f.properties[fieldName]) : '-');
                         layer.bindTooltip(text, { permanent: true, direction: 'auto', className: 'custom-map-label' });
                     }
-                    if (layerGroups[layerName]) layerGroups[layerName].addLayer(layer);
+
+                    if (layerGroups[layerName]) {
+                        layerGroups[layerName].addLayer(layer);
+                        
+                        // 🌟 เพิ่มหมุดวงกลม (Endpoints) ที่หัวและท้ายของเส้น
+                        if (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') {
+                            const coords = turf.coordAll(f);
+                            if (coords.length > 1) {
+                                const start = coords[0];
+                                const end = coords[coords.length - 1];
+                                const color = lInfo ? lInfo.color : '#3388ff';
+                                // สไตล์หมุดวงกลมมีขอบสีขาวให้ดูสะอาดตา
+                                const nodeStyle = { radius: 4, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: 1, interactive: false };
+                                
+                                layerGroups[layerName].addLayer(L.circleMarker([start[1], start[0]], nodeStyle));
+                                layerGroups[layerName].addLayer(L.circleMarker([end[1], end[0]], nodeStyle));
+                            }
+                        }
+                    }
                 }
             });
         }
