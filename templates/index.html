@@ -140,6 +140,7 @@
                     <div><label class="block text-xs font-bold text-slate-600 mb-1">สีสัญลักษณ์</label><input type="color" id="new_layer_color" value="#10b981" class="w-full h-10 rounded-lg cursor-pointer border-0 p-0"></div>
                     <div><label class="block text-xs font-bold text-slate-600 mb-1">ประเภท</label><select id="new_layer_type" class="w-full border rounded-lg p-2.5 text-sm bg-white"><option value="Point">จุด (Marker)</option><option value="Line">เส้น / รูปปิด</option></select></div>
                 </div>
+                
                 <div class="pt-4 border-t border-slate-100">
                     <div class="flex justify-between items-center mb-2">
                         <label class="block text-xs font-bold text-slate-600">ฟิลด์ข้อมูลเพิ่มเติม (Attributes)</label>
@@ -147,6 +148,7 @@
                     </div>
                     <div id="fields_container" class="space-y-2"></div>
                 </div>
+
                 <div class="flex flex-col gap-2 pt-4">
                     <button type="submit" class="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-sm shadow-md transition hover:bg-emerald-600">บันทึกชั้นข้อมูล</button>
                     <button type="button" id="btnDeleteLayer" onclick="deleteCurrentLayer()" class="hidden w-full bg-red-50 text-red-500 font-bold py-2.5 rounded-lg text-sm border border-red-100 hover:bg-red-500 hover:text-white transition">ลบชั้นข้อมูลนี้ทิ้ง</button>
@@ -182,6 +184,7 @@
                 </div>
                 <button type="button" onclick="toggleModal('analyticsModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
+            
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
                     <span class="block text-xs font-bold text-slate-400 mb-1 uppercase">จำนวนพิกัด</span>
@@ -192,6 +195,7 @@
                     <span class="text-2xl font-bold text-emerald-500" id="analyticsGeoValue">-</span>
                 </div>
             </div>
+
             <div class="bg-slate-50 rounded-xl border border-slate-100 p-4">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-[10px] md:text-xs font-bold text-slate-500" id="chartLabel">สัดส่วนข้อมูลตาม:</h3>
@@ -258,7 +262,7 @@
                 let labelIsActive = !!labelFieldState[layer.name];
                 let labelBtnColor = labelIsActive ? 'text-amber-400' : 'text-slate-400';
 
-                // ใส่ pointer-events-none ในไอคอนทุกตัวเพื่อป้องกันการถูกขวางคลิก
+                // 🌟 ใส่ pointer-events-none ที่ icon ไอคอนจะไม่ขวางการคลิก
                 container.innerHTML += `
                     <div class="relative group mb-2">
                         <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value)">
@@ -424,7 +428,7 @@
         };
         window.clearBufferArea = function() { bufferGroup.clearLayers(); };
 
-        // 🌟 เปิดหน้าต่าง Modal ก่อน แล้วหน่วงเวลาสร้างกราฟ Chart.js เพื่อแก้บั๊กกราฟล่ม
+        // 🌟 แก้ไข: เปิดหน้าต่างให้กางเสร็จก่อน ค่อยประมวลผลวาดกราฟ
         window.openLayerDashboard = function(layerName) {
             const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) return; 
             currentAnalyticsLayer = layerName; const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName);
@@ -444,19 +448,21 @@
                 geoValue.innerText = formatArea(totalSqm); geoValue.className = "text-xl font-bold text-emerald-500"; 
             }
             
-            // สั่งให้หน้าต่าง Modal โชว์ขึ้นมาก่อน
+            // สั่งโชว์ Modal ก่อน
             toggleModal('analyticsModal');
             
-            // ตั้งเวลาหน่วง 0.1 วินาที ให้หน้าต่างแสดงผลเสร็จก่อน ค่อยสร้างกราฟ
+            // หน่วงเวลา 0.2 วินาทีให้ Modal มีความกว้างค่อยวาดกราฟ
             setTimeout(() => {
-                const select = document.getElementById('analyticsFieldSelect'); select.innerHTML = '';
-                if(layerInfo.fields && layerInfo.fields.length > 0) { 
-                    layerInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; }); 
-                    select.style.display = 'block'; updateAnalyticsChart(); 
-                } else { 
-                    select.style.display = 'none'; document.getElementById('chartLabel').innerText = "ไม่มีฟิลด์ให้วิเคราะห์"; drawEmptyChart(layerInfo.color, featuresInLayer.length); 
-                }
-            }, 100);
+                try {
+                    const select = document.getElementById('analyticsFieldSelect'); select.innerHTML = '';
+                    if(layerInfo.fields && layerInfo.fields.length > 0) { 
+                        layerInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; }); 
+                        select.style.display = 'block'; updateAnalyticsChart(); 
+                    } else { 
+                        select.style.display = 'none'; document.getElementById('chartLabel').innerText = "ไม่มีฟิลด์ให้วิเคราะห์"; drawEmptyChart(layerInfo.color, featuresInLayer.length); 
+                    }
+                } catch(e) { console.error(e); }
+            }, 200);
         }
 
         window.updateAnalyticsChart = function() {
@@ -541,7 +547,17 @@
             c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"><input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500"><option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash pointer-events-none"></i></button></div>`;
         }
         
-        window.toggleModal = function(id) { const modal = document.getElementById(id); if(modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); } }
+        window.toggleModal = function(id) { 
+            const modal = document.getElementById(id); 
+            if(modal.classList.contains('hidden')) { 
+                modal.classList.remove('hidden'); 
+                setTimeout(() => modal.classList.remove('opacity-0'), 10); 
+            } else { 
+                modal.classList.add('opacity-0'); 
+                setTimeout(() => modal.classList.add('hidden'), 300); 
+            } 
+        }
+        
         window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ'); addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
         window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal'); }
         window.saveLayer = async function(e) { e.preventDefault(); const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value; const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) }); toggleModal('layerModal'); fetchLayers(); }
