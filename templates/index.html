@@ -28,8 +28,6 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; }
         
-        .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
-        
         #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
         #attribute-panel.open { height: 45vh; border-top: 4px solid #1e293b; } 
         .table-container { flex: 1; overflow: auto; }
@@ -140,7 +138,6 @@
                     <div><label class="block text-xs font-bold text-slate-600 mb-1">สีสัญลักษณ์</label><input type="color" id="new_layer_color" value="#10b981" class="w-full h-10 rounded-lg cursor-pointer border-0 p-0"></div>
                     <div><label class="block text-xs font-bold text-slate-600 mb-1">ประเภท</label><select id="new_layer_type" class="w-full border rounded-lg p-2.5 text-sm bg-white"><option value="Point">จุด (Marker)</option><option value="Line">เส้น / รูปปิด</option></select></div>
                 </div>
-                
                 <div class="pt-4 border-t border-slate-100">
                     <div class="flex justify-between items-center mb-2">
                         <label class="block text-xs font-bold text-slate-600">ฟิลด์ข้อมูลเพิ่มเติม (Attributes)</label>
@@ -148,7 +145,6 @@
                     </div>
                     <div id="fields_container" class="space-y-2"></div>
                 </div>
-
                 <div class="flex flex-col gap-2 pt-4">
                     <button type="submit" class="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-sm shadow-md transition hover:bg-emerald-600">บันทึกชั้นข้อมูล</button>
                     <button type="button" id="btnDeleteLayer" onclick="deleteCurrentLayer()" class="hidden w-full bg-red-50 text-red-500 font-bold py-2.5 rounded-lg text-sm border border-red-100 hover:bg-red-500 hover:text-white transition">ลบชั้นข้อมูลนี้ทิ้ง</button>
@@ -184,7 +180,6 @@
                 </div>
                 <button type="button" onclick="toggleModal('analyticsModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
                     <span class="block text-xs font-bold text-slate-400 mb-1 uppercase">จำนวนพิกัด</span>
@@ -195,13 +190,14 @@
                     <span class="text-2xl font-bold text-emerald-500" id="analyticsGeoValue">-</span>
                 </div>
             </div>
-
             <div class="bg-slate-50 rounded-xl border border-slate-100 p-4">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-[10px] md:text-xs font-bold text-slate-500" id="chartLabel">สัดส่วนข้อมูลตาม:</h3>
                     <select id="analyticsFieldSelect" class="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-purple-500 bg-white max-w-[120px]" onchange="updateAnalyticsChart()"></select>
                 </div>
-                <div class="h-48 relative flex justify-center w-full"><canvas id="layerAnalyticsChart"></canvas></div>
+                <div class="h-48 relative flex justify-center w-full" id="chartContainer">
+                    <canvas id="layerAnalyticsChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -239,13 +235,14 @@
         let labelFieldState = JSON.parse(localStorage.getItem('maechanLabelFieldState')) || {};
 
         let appLayers = []; let layerGroups = {}; let allFeatures = [];
-        let analyticsChartInstance = null; let currentAnalyticsLayer = ''; let bufferGroup = L.layerGroup().addTo(map);
+        let currentAnalyticsLayer = ''; let bufferGroup = L.layerGroup().addTo(map);
 
         function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
         function formatArea(sqm) { const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4; let text = ''; if (rai > 0) text += rai + ' ไร่ '; if (ngan > 0) text += ngan + ' งาน '; if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.'; return text.trim(); }
         function getMeasurementBadge(geojson) { try { if (geojson.geometry.type === 'LineString' || geojson.geometry.type === 'MultiLineString') { return `<div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-blue-100 shadow-sm"><i class="fa-solid fa-ruler-horizontal mr-1"></i> ความยาว: ${formatDistance(turf.length(geojson, {units: 'meters'}))}</div>`; } else if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') { return `<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-emerald-100 shadow-sm"><i class="fa-solid fa-draw-polygon mr-1"></i> พื้นที่: ${formatArea(turf.area(geojson))}</div>`; } } catch(e) { console.error(e); } return ''; }
         function getLabelText(properties) { if(properties['ชื่อ']) return properties['ชื่อ']; if(properties['ชื่อลำน้ำ']) return properties['ชื่อลำน้ำ']; if(properties['ชื่อถนน']) return properties['ชื่อถนน']; if(properties['Name']) return properties['Name']; if(properties['name']) return properties['name']; for(let k in properties) { if(!['id', 'layer_name'].includes(k)) return properties[k]; } return 'ไม่มีชื่อ'; }
 
+        // 🌟 แก้โครงสร้างปุ่มให้แยกขาดจากกัน ไม่มีการกดทับซ้อน
         async function fetchLayers() {
             const res = await fetch('/api/layers');
             appLayers = await res.json();
@@ -262,22 +259,22 @@
                 let labelIsActive = !!labelFieldState[layer.name];
                 let labelBtnColor = labelIsActive ? 'text-amber-400' : 'text-slate-400';
 
-                // 🌟 ใส่ pointer-events-none ที่ icon ไอคอนจะไม่ขวางการคลิก
+                // ใช้ replace ป้องกัน Error ชื่อเลเยอร์ที่มีเครื่องหมายขีดหรือช่องว่าง
+                const safeName = layer.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
                 container.innerHTML += `
-                    <div class="relative group mb-2">
-                        <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value)">
-                        <div class="flex items-center justify-between p-2.5 bg-slate-800 rounded-xl border-2 border-transparent transition group-hover:bg-slate-700">
-                            <label for="radio_${index}" class="flex items-center gap-2 cursor-pointer flex-1 w-full overflow-hidden pr-2">
-                                <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle shrink-0" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
-                                <span class="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis" style="color: ${layer.color}" title="${layer.name}"><i class="fa-solid fa-layer-group mr-1 pointer-events-none"></i>${layer.name}</span>
-                            </label>
-                            <div class="flex gap-0.5 shrink-0 z-10 relative">
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLabelModal('${layer.name}')" class="${labelBtnColor} hover:text-amber-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตั้งค่าแสดงป้ายชื่อ"><i class="fa-solid fa-tag text-xs pointer-events-none"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openLayerDashboard('${layer.name}')" class="text-slate-400 hover:text-purple-400 p-1.5 rounded hover:bg-slate-900 transition" title="แดชบอร์ด"><i class="fa-solid fa-chart-pie text-xs pointer-events-none"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openTable('${layer.name}')" class="text-slate-400 hover:text-blue-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตารางข้อมูล"><i class="fa-solid fa-table-list text-xs pointer-events-none"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openEditModal('${layer.name}')" class="text-slate-400 hover:text-emerald-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตั้งค่าเลเยอร์"><i class="fa-solid fa-pen text-xs pointer-events-none"></i></button>
-                                <button type="button" onclick="event.preventDefault(); event.stopPropagation(); deleteCurrentLayer('${layer.name}')" class="text-slate-400 hover:text-red-400 p-1.5 rounded hover:bg-slate-900 transition" title="ลบเลเยอร์"><i class="fa-solid fa-trash-can text-xs pointer-events-none"></i></button>
-                            </div>
+                    <div class="p-2 bg-slate-800 rounded-xl border ${isRadioChecked ? 'border-emerald-500' : 'border-slate-700'} mb-2 flex items-center justify-between hover:border-emerald-500 transition">
+                        <div class="flex items-center gap-2 overflow-hidden w-1/2">
+                            <input type="radio" name="active_layer" value="${layer.name}" class="w-4 h-4 accent-emerald-500 cursor-pointer shrink-0" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value); fetchLayers();">
+                            <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 cursor-pointer shrink-0" data-layer="${layer.name}" onchange="toggleLayerVisibility(this)">
+                            <span class="text-sm font-medium truncate cursor-default" style="color: ${layer.color}" title="${layer.name}">${layer.name}</span>
+                        </div>
+                        <div class="flex gap-0.5 shrink-0 z-10">
+                            <button type="button" onclick="openLabelModal('${safeName}')" class="${labelBtnColor} hover:text-amber-400 p-1.5 rounded hover:bg-slate-900 transition" title="ป้ายชื่อ"><i class="fa-solid fa-tag text-xs"></i></button>
+                            <button type="button" onclick="openLayerDashboard('${safeName}')" class="text-slate-400 hover:text-purple-400 p-1.5 rounded hover:bg-slate-900 transition" title="แดชบอร์ด"><i class="fa-solid fa-chart-pie text-xs"></i></button>
+                            <button type="button" onclick="openTable('${safeName}')" class="text-slate-400 hover:text-blue-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตารางข้อมูล"><i class="fa-solid fa-table-list text-xs"></i></button>
+                            <button type="button" onclick="openEditModal('${safeName}')" class="text-slate-400 hover:text-emerald-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตั้งค่าเลเยอร์"><i class="fa-solid fa-pen text-xs"></i></button>
+                            <button type="button" onclick="deleteCurrentLayer('${safeName}')" class="text-slate-400 hover:text-red-400 p-1.5 rounded hover:bg-slate-900 transition" title="ลบเลเยอร์"><i class="fa-solid fa-trash-can text-xs"></i></button>
                         </div>
                     </div>`;
             });
@@ -428,9 +425,9 @@
         };
         window.clearBufferArea = function() { bufferGroup.clearLayers(); };
 
-        // 🌟 แก้ไข: เปิดหน้าต่างให้กางเสร็จก่อน ค่อยประมวลผลวาดกราฟ
+        // 🌟 แก้ไข: ล้าง Canvas เก่าทิ้ง สร้างใหม่เพื่อป้องกันกราฟ Chart.js ทับกันจนพัง
         window.openLayerDashboard = function(layerName) {
-            const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) return; 
+            const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
             currentAnalyticsLayer = layerName; const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName);
             document.getElementById('analyticsTitle').innerHTML = `<i class="fa-solid fa-chart-pie mr-2" style="color:${layerInfo.color}"></i> สรุป: ${layerName}`; 
             document.getElementById('analyticsCount').innerText = featuresInLayer.length.toLocaleString();
@@ -448,31 +445,40 @@
                 geoValue.innerText = formatArea(totalSqm); geoValue.className = "text-xl font-bold text-emerald-500"; 
             }
             
-            // สั่งโชว์ Modal ก่อน
             toggleModal('analyticsModal');
             
-            // หน่วงเวลา 0.2 วินาทีให้ Modal มีความกว้างค่อยวาดกราฟ
+            // หน่วงเวลาให้หน้าต่างขึ้นมาก่อน 0.2 วินาที แล้วค่อยวาดกราฟ
             setTimeout(() => {
-                try {
-                    const select = document.getElementById('analyticsFieldSelect'); select.innerHTML = '';
-                    if(layerInfo.fields && layerInfo.fields.length > 0) { 
-                        layerInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; }); 
-                        select.style.display = 'block'; updateAnalyticsChart(); 
-                    } else { 
-                        select.style.display = 'none'; document.getElementById('chartLabel').innerText = "ไม่มีฟิลด์ให้วิเคราะห์"; drawEmptyChart(layerInfo.color, featuresInLayer.length); 
-                    }
-                } catch(e) { console.error(e); }
+                const select = document.getElementById('analyticsFieldSelect'); select.innerHTML = '';
+                if(layerInfo.fields && layerInfo.fields.length > 0) { 
+                    layerInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; }); 
+                    select.style.display = 'block'; 
+                    document.getElementById('chartLabel').style.display = 'block';
+                    updateAnalyticsChart(); 
+                } else { 
+                    select.style.display = 'none'; 
+                    document.getElementById('chartLabel').style.display = 'none';
+                    drawEmptyChart(layerInfo.color, featuresInLayer.length); 
+                }
             }, 200);
         }
 
         window.updateAnalyticsChart = function() {
             const fieldName = document.getElementById('analyticsFieldSelect').value; const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === currentAnalyticsLayer);
-            const counts = {}; featuresInLayer.forEach(f => { let val = f.properties[fieldName]; if(!val) val = "ไม่ระบุ"; counts[val] = (counts[val] || 0) + 1; });
-            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); if(analyticsChartInstance) analyticsChartInstance.destroy();
+            const counts = {}; featuresInLayer.forEach(f => { let val = f.properties[fieldName]; if(!val || val.toString().trim()==='') val = "ไม่ระบุ"; counts[val] = (counts[val] || 0) + 1; });
+            
+            // ล้าง Canvas เก่าทิ้ง สร้างอันใหม่เสมอเพื่อป้องกัน Chart.js ล่ม
+            document.getElementById('chartContainer').innerHTML = '<canvas id="layerAnalyticsChart"></canvas>';
+            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); 
+            
             const bgColors = Object.keys(counts).map((key, i) => key === 'ไม่ระบุ' ? '#cbd5e1' : `hsl(${(i * 137.5) % 360}, 70%, 60%)`);
-            analyticsChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: bgColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 8, font: { size: 10, family: 'Prompt' } } } }, cutout: '65%' } });
+            new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: bgColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 8, font: { size: 10, family: 'Prompt' } } } }, cutout: '65%' } });
         }
-        function drawEmptyChart(color, count) { const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); if(analyticsChartInstance) analyticsChartInstance.destroy(); analyticsChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); }
+        function drawEmptyChart(color, count) { 
+            document.getElementById('chartContainer').innerHTML = '<canvas id="layerAnalyticsChart"></canvas>';
+            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); 
+            new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); 
+        }
 
         window.zoomToFeature = function(id) {
             let targetLayer = null;
@@ -484,7 +490,7 @@
         };
 
         window.openTable = function(layerName) {
-            const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) return;
+            const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
             document.getElementById('current-table-layer').innerText = layerName;
             const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center">จัดการ</th></tr>'; head.innerHTML = headHtml;
             const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
@@ -547,19 +553,9 @@
             c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"><input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500"><option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash pointer-events-none"></i></button></div>`;
         }
         
-        window.toggleModal = function(id) { 
-            const modal = document.getElementById(id); 
-            if(modal.classList.contains('hidden')) { 
-                modal.classList.remove('hidden'); 
-                setTimeout(() => modal.classList.remove('opacity-0'), 10); 
-            } else { 
-                modal.classList.add('opacity-0'); 
-                setTimeout(() => modal.classList.add('hidden'), 300); 
-            } 
-        }
-        
+        window.toggleModal = function(id) { const modal = document.getElementById(id); if(modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); } }
         window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ'); addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
-        window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal'); }
+        window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); if(!l) return; document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal'); }
         window.saveLayer = async function(e) { e.preventDefault(); const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value; const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) }); toggleModal('layerModal'); fetchLayers(); }
         window.deleteCurrentLayer = async function(name) { if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); location.reload(); } }
         window.deleteFeature = async function(id) { if (confirm('คุณต้องการลบพิกัดนี้ใช่หรือไม่?')) { await fetch(`/api/features/${id}`, { method: 'DELETE' }); fetchFeatures(); map.closePopup(); } }
