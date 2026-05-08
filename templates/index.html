@@ -220,6 +220,7 @@
         L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
         map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
 
+        // ระบบ Highlight สีแดงเวลาคลิกดูข้อมูล
         let highlightedLayer = null; let highlightedOriginalStyle = null;
         map.on('popupopen', function(e) {
             const layer = e.popup._source; if (!layer || !layer.setStyle) return; 
@@ -259,7 +260,6 @@
                 let labelIsActive = !!labelFieldState[layer.name];
                 let labelBtnColor = labelIsActive ? 'text-amber-400' : 'text-slate-400';
 
-                // 🚀 เปลี่ยนวิธีอ้างอิงชื่อให้ปลอดภัยที่สุด ป้องกัน HTML พัง
                 const safeNameAttr = layer.name.replace(/"/g, '&quot;');
 
                 container.innerHTML += `
@@ -409,7 +409,6 @@
             } catch (err) { alert(err.message); }
         }
 
-        // 🚀 ป้องกันระบบวิเคราะห์ล่ม เมื่อพิกัดเป็น Null
         window.drawCombinedAnalysis = function() {
             bufferGroup.clearLayers(); const activeRadio = document.querySelector('input[name="active_layer"]:checked'); if (!activeRadio) return;
             const activeName = activeRadio.value; const selectedRadius = parseInt(document.getElementById('bufferRadiusSelect').value);
@@ -430,7 +429,6 @@
         };
         window.clearBufferArea = function() { bufferGroup.clearLayers(); };
 
-        // 🚀 ดักจับ Error กราฟล่ม และป้องกันพิกัด Null ทำหน้าต่างไม่เด้ง
         window.openLayerDashboard = function(layerName) {
             try {
                 const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
@@ -488,18 +486,64 @@
             new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); 
         }
 
-        // 🚀 ดักจับ Error ตารางล่ม
+        // 🚀 แก้บั๊กคลิกตาราง แล้วแผนที่ไม่ซูม (บวกกับปิดตารางให้เห็นแผนที่ชัดๆ)
+        window.zoomToFeature = function(id) {
+            let targetLayer = null;
+            Object.values(layerGroups).forEach(group => { 
+                group.eachLayer(layer => { 
+                    if (layer.feature && layer.feature.properties && layer.feature.properties.id === id) { 
+                        targetLayer = layer; 
+                    } 
+                }); 
+            });
+
+            if (targetLayer) {
+                // ปิดตารางอัตโนมัติบนมือถือ เพื่อให้เห็นแผนที่เต็มๆ
+                if(window.innerWidth < 768) { closeTable(); }
+
+                const center = targetLayer.getBounds ? targetLayer.getBounds().getCenter() : targetLayer.getLatLng();
+                map.flyTo(center, 18, { duration: 0.5 }); 
+                
+                setTimeout(() => { 
+                    if (!map.hasLayer(targetLayer)) { map.addLayer(targetLayer); }
+                    targetLayer.openPopup(); 
+                }, 600);
+            } else {
+                alert('ไม่พบข้อมูลบนแผนที่ อาจถูกซ่อนอยู่');
+            }
+        };
+
+        // 🚀 ฟังก์ชันใหม่: แก้ไขข้อมูลตรงจากตาราง
+        window.editFeatureFromTable = function(id) {
+            closeTable(); // พับตารางเก็บ เพื่อให้เห็นหน้าต่างบนแผนที่ชัดเจน
+            zoomToFeature(id);
+            setTimeout(() => {
+                const viewEl = document.getElementById(`view_${id}`);
+                const editEl = document.getElementById(`edit_${id}`);
+                if (viewEl && editEl) {
+                    viewEl.classList.add('hidden');
+                    editEl.classList.remove('hidden');
+                }
+            }, 800); // รอให้มันซูมไปหาเสร็จ แล้วเปิดโหมดแก้ไขให้ทันที
+        };
+
+        // 🚀 เพิ่มปุ่มแก้ไข (สีเหลือง) เข้าไปในตาราง
         window.openTable = function(layerName) {
             try {
                 const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
                 document.getElementById('current-table-layer').innerText = layerName;
-                const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center">จัดการ</th></tr>'; head.innerHTML = headHtml;
+                
+                const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center w-24">จัดการ</th></tr>'; head.innerHTML = headHtml;
+                
                 const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
                 featuresInLayer.forEach(f => {
                     bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="zoomToFeature(${f.properties.id})">`;
                     bodyHtml += `<td class="p-2 border-r text-center text-slate-400">${f.properties.id}</td>`;
                     if (layerInfo.fields) { layerInfo.fields.forEach(field => { bodyHtml += `<td class="p-2 border-r">${f.properties[field.name] || '-'}</td>`; }); }
-                    bodyHtml += `<td class="p-2 text-center"><button onclick="event.stopPropagation(); deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-trash-can pointer-events-none"></i></button></td></tr>`;
+                    bodyHtml += `<td class="p-2 text-center whitespace-nowrap">
+                        <button onclick="event.stopPropagation(); editFeatureFromTable(${f.properties.id})" class="text-amber-500 hover:text-amber-600 mr-2" title="แก้ไขข้อมูล"><i class="fa-solid fa-pen pointer-events-none"></i></button>
+                        <button onclick="event.stopPropagation(); deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600" title="ลบข้อมูล"><i class="fa-solid fa-trash-can pointer-events-none"></i></button>
+                    </td></tr>`;
                 });
                 body.innerHTML = bodyHtml || `<tr><td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">ไม่มีข้อมูล</td></tr>`;
                 panel.classList.add('open'); mapEl.style.height = window.innerWidth < 768 ? '55vh' : '65vh'; setTimeout(() => map.invalidateSize(), 300);
@@ -555,7 +599,17 @@
             c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"><input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500"><option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash pointer-events-none"></i></button></div>`;
         }
         
-        window.toggleModal = function(id) { const modal = document.getElementById(id); if(modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); } }
+        window.toggleModal = function(id) { 
+            const modal = document.getElementById(id); 
+            if(modal.classList.contains('hidden')) { 
+                modal.classList.remove('hidden'); 
+                setTimeout(() => modal.classList.remove('opacity-0'), 10); 
+            } else { 
+                modal.classList.add('opacity-0'); 
+                setTimeout(() => modal.classList.add('hidden'), 300); 
+            } 
+        }
+        
         window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ'); addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
         window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); if(!l) { alert('ไม่พบข้อมูล'); return; } document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal'); }
         window.saveLayer = async function(e) { e.preventDefault(); const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value; const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) }); toggleModal('layerModal'); fetchLayers(); }
