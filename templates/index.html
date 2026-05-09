@@ -244,10 +244,10 @@
         function getMeasurementBadge(geojson) { try { if (geojson.geometry.type === 'LineString' || geojson.geometry.type === 'MultiLineString') { return `<div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-blue-100 shadow-sm"><i class="fa-solid fa-ruler-horizontal mr-1"></i> ความยาว: ${formatDistance(turf.length(geojson, {units: 'meters'}))}</div>`; } else if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') { return `<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-emerald-100 shadow-sm"><i class="fa-solid fa-draw-polygon mr-1"></i> พื้นที่: ${formatArea(turf.area(geojson))}</div>`; } } catch(e) { console.error(e); } return ''; }
         function getLabelText(properties) { if(properties['ชื่อ']) return properties['ชื่อ']; if(properties['ชื่อลำน้ำ']) return properties['ชื่อลำน้ำ']; if(properties['ชื่อถนน']) return properties['ชื่อถนน']; if(properties['Name']) return properties['Name']; if(properties['name']) return properties['name']; for(let k in properties) { if(!['id', 'layer_name'].includes(k)) return properties[k]; } return 'ไม่มีชื่อ'; }
 
-        // ฟังก์ชันโหลด Layer (เพิ่ม cache: 'no-store' ป้องกันการจำค่าเก่า)
+        // 🚀 ฟังก์ชันโหลดเลเยอร์ (แนบ Timestamp สกัด Cache)
         async function fetchLayers() {
             try {
-                const res = await fetch('/api/layers', { cache: 'no-store' });
+                const res = await fetch('/api/layers?v=' + new Date().getTime(), { cache: 'no-store', headers: { 'Pragma': 'no-cache' } });
                 appLayers = await res.json();
                 const container = document.getElementById('layer-container');
                 container.innerHTML = '';
@@ -297,11 +297,12 @@
         window.saveLabelSettings = function() { const layerName = document.getElementById('label_layer_name').value; const field = document.getElementById('label_field_select').value; labelFieldState[layerName] = field; localStorage.setItem('maechanLabelFieldState', JSON.stringify(labelFieldState)); toggleModal('labelModal'); fetchLayers(); }
         window.turnOffLabels = function() { const layerName = document.getElementById('label_layer_name').value; delete labelFieldState[layerName]; localStorage.setItem('maechanLabelFieldState', JSON.stringify(labelFieldState)); toggleModal('labelModal'); fetchLayers(); }
 
-        // 🌟 ดึงข้อมูลพิกัด (เพิ่ม cache: 'no-store' เพื่อป้องกันเบราว์เซอร์จำข้อมูลที่ลบไปแล้ว)
+        // 🚀 ดึงข้อมูลพิกัด (แนบ Timestamp สกัด Cache ทุกครั้งที่โหลดข้อมูล)
         async function fetchFeatures() {
             try {
                 Object.values(layerGroups).forEach(g => g.clearLayers());
-                const res = await fetch('/api/features', { cache: 'no-store' }); 
+                // แนบ V=เวลาปัจจุบัน เพื่อบังคับให้โหลดข้อมูลใหม่เสมอ (ปิดตาย Cache)
+                const res = await fetch('/api/features?v=' + new Date().getTime(), { cache: 'no-store', headers: { 'Pragma': 'no-cache' } }); 
                 const data = await res.json(); 
                 allFeatures = data.features;
                 
@@ -389,7 +390,6 @@
 
         window.toggleEdit = function(id) { document.getElementById(`view_${id}`).classList.toggle('hidden'); document.getElementById(`edit_${id}`).classList.toggle('hidden'); };
 
-        // 🌟 อัปเดตข้อมูลแล้วให้ตารางเปลี่ยนตามด้วย
         window.updateFeature = async function(id, btnEvent) {
             try {
                 const feature = allFeatures.find(f => f.properties.id === id); const props = { ...feature.properties };
@@ -399,12 +399,13 @@
                 const geojsonData = { type: "Feature", geometry: feature.geometry, properties: props };
                 btnEvent.target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
                 
-                const response = await fetch(`/api/features/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ properties: props, geojson: geojsonData }) });
+                // แนบ Timestamp ทะลวง Cache
+                const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ properties: props, geojson: geojsonData }) });
                 const result = await response.json(); if(result.status !== 'success') throw new Error(result.message);
                 
                 map.closePopup(); 
                 await fetchFeatures();
-                refreshActiveTable(); // รีเฟรชตาราง
+                refreshActiveTable(); 
             } catch (err) { alert("บันทึกไม่สำเร็จ: " + err.message); }
         };
 
@@ -421,22 +422,30 @@
                 
                 window.tempLayer.remove(); 
                 await fetchFeatures();
-                refreshActiveTable(); // รีเฟรชตาราง
+                refreshActiveTable(); 
             } catch (err) { alert(err.message); }
         }
 
-        // 🌟 แก้ระบบลบให้มีตัวโหลดและล้าง Cache สมบูรณ์
+        // 🚀 ระบบลบพิกัดที่ฉลาดขึ้น ลบแล้วหายทันทีจากจอ ไม่ต้องรอโหลดนาน
         window.deleteFeature = async function(id) { 
-            if (confirm('คุณต้องการลบพิกัดนี้ใช่หรือไม่?')) { 
+            if (confirm('คุณต้องการลบพิกัดนี้ถาวรใช่หรือไม่?')) { 
                 try {
                     document.getElementById('loadingModal').classList.remove('hidden');
-                    const response = await fetch(`/api/features/${id}`, { method: 'DELETE' }); 
+                    
+                    // ปิดหน้าต่าง Popup ก่อนเลย
+                    map.closePopup(); 
+                    
+                    // สั่งลบที่หลังบ้าน
+                    const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' }); 
                     const result = await response.json();
                     if(result.status !== 'success') throw new Error("ลบข้อมูลไม่สำเร็จ");
                     
-                    map.closePopup(); 
-                    await fetchFeatures(); // โหลดใหม่โดยบังคับไม่ให้ใช้ cache
-                    refreshActiveTable(); // รีเฟรชตาราง
+                    // ล้างเลเยอร์ทั้งหมดออกจากจอก่อนชั่วคราว เพื่อไม่ให้ภาพเก่าค้าง
+                    Object.values(layerGroups).forEach(g => g.clearLayers());
+                    
+                    // โหลดข้อมูลชุดใหม่ที่ไม่มีพิกัดนั้นแล้ว
+                    await fetchFeatures(); 
+                    refreshActiveTable(); 
 
                 } catch (err) {
                     alert("เกิดข้อผิดพลาด: " + err.message);
@@ -446,17 +455,11 @@
             } 
         }
 
-        // 🌟 ฟังก์ชันตัวช่วยสำหรับรีเฟรชตารางอัตโนมัติ
         function refreshActiveTable() {
             const activeLayer = document.getElementById('current-table-layer').innerText;
             const panel = document.getElementById('attribute-panel');
             if(panel.classList.contains('open') && activeLayer && activeLayer !== '-') {
-                // เช็กว่าเลเยอร์ยังอยู่ไหม (เผื่อโดนลบเลเยอร์ทิ้งไปแล้ว)
-                if (appLayers.find(l => l.name === activeLayer)) {
-                    openTable(activeLayer);
-                } else {
-                    closeTable();
-                }
+                if (appLayers.find(l => l.name === activeLayer)) { openTable(activeLayer); } else { closeTable(); }
             }
         }
 
@@ -518,7 +521,9 @@
                     } catch(e) { console.error("Chart Error: ", e); }
                 }, 200);
 
-            } catch (error) { alert("เกิดข้อผิดพลาดในการเปิดแดชบอร์ด: " + error.message); }
+            } catch (error) {
+                alert("เกิดข้อผิดพลาดในการเปิดแดชบอร์ด: " + error.message);
+            }
         }
 
         window.updateAnalyticsChart = function() {
@@ -555,7 +560,7 @@
                     targetLayer.openPopup(); 
                 }, 600);
             } else {
-                alert('ไม่พบข้อมูลบนแผนที่ (อาจถูกปิดตาซ่อนไว้)');
+                alert('ไม่พบข้อมูลบนแผนที่ (อาจถูกปิดตาซ่อนไว้ หรือเพิ่งลบไป)');
             }
         };
 
@@ -643,7 +648,17 @@
             c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"><input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500"><option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash pointer-events-none"></i></button></div>`;
         }
         
-        window.toggleModal = function(id) { const modal = document.getElementById(id); if(modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); } }
+        window.toggleModal = function(id) { 
+            const modal = document.getElementById(id); 
+            if(modal.classList.contains('hidden')) { 
+                modal.classList.remove('hidden'); 
+                setTimeout(() => modal.classList.remove('opacity-0'), 10); 
+            } else { 
+                modal.classList.add('opacity-0'); 
+                setTimeout(() => modal.classList.add('hidden'), 300); 
+            } 
+        }
+        
         window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; addFieldRow('ชื่อ'); addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); toggleModal('layerModal'); }
         window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); if(!l) { alert('ไม่พบข้อมูล'); return; } document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); toggleModal('layerModal'); }
         window.saveLayer = async function(e) { e.preventDefault(); const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value; const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) }); toggleModal('layerModal'); fetchLayers(); }
