@@ -238,6 +238,9 @@
         let appLayers = []; let layerGroups = {}; let allFeatures = [];
         let currentAnalyticsLayer = ''; let bufferGroup = L.layerGroup().addTo(map);
         let lastFeaturesString = ""; 
+        
+        // 🚦 ตัวแปรสำหรับป้องกัน Auto-Update วิ่งชนตอนกำลังแก้ไขข้อมูล
+        let isProcessing = false;
 
         function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
         function formatArea(sqm) { const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4; let text = ''; if (rai > 0) text += rai + ' ไร่ '; if (ngan > 0) text += ngan + ' งาน '; if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.'; return text.trim(); }
@@ -370,13 +373,15 @@
             } catch (err) { console.error("Error fetching features: ", err); }
         }
 
-        // 🔄 ระบบ Auto-Update
+        // ⏱️ ระบบ Auto-Update (ดึงข้อมูลทุก 2 วินาที)
         setInterval(async () => {
-            if (!window.tempLayer && !window.tempVisualLayer && !highlightedLayer) {
+            // ถ้าระบบไม่ได้กำลังทำงานอยู่ (ไม่เปิดหน้าต่างปักหมุด หรือกำลังพิมพ์แก้) ให้ดึงข้อมูลได้
+            if (!window.tempLayer && !window.tempVisualLayer && !highlightedLayer && !isProcessing) {
                 try {
                     const res = await fetch('/api/features?v=' + new Date().getTime(), { cache: 'no-store' }); 
                     const text = await res.text();
                     
+                    // ถ้าตรวจพบว่าข้อมูลเซิร์ฟเวอร์เปลี่ยนไปจากในจอ ค่อยวาดแผนที่ใหม่
                     if (text !== lastFeaturesString) {
                         lastFeaturesString = text;
                         const data = JSON.parse(text);
@@ -386,9 +391,9 @@
                     }
                 } catch (err) {}
             }
-        }, 2500);
+        }, 2000); // 2000 ms = 2 วินาทีเป๊ะ
 
-        // 🌟 แก้บั๊กหมุดน้ำเงินช็อกระบบด้วยวิธี "ผ้าคลุมล่องหน"
+        // 🌟 แก้ระบบปักหมุด (ใช้ผ้าคลุมล่องหนปิดหมุดสีน้ำเงิน เพื่อป้องกัน Geoman Error)
         map.pm.setLang('th');
         map.on('pm:create', async (e) => {
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
@@ -398,12 +403,13 @@
             let tempLayer = e.layer;
             let visualLayer = null;
             
+            // กรณีเป็น "จุด" เราจะเก็บหมุดสีน้ำเงินเดิมไว้แต่ทำให้มันโปร่งใส (ลบไม่ได้เดี๋ยวระบบพัง)
             if (e.shape === "Marker" || e.shape === "CircleMarker") {
-                // 1. ใส่ผ้าคลุมล่องหนให้หมุดน้ำเงินเดิม (ระบบ Geoman จะได้ไม่งงและไม่ช็อก)
                 if(tempLayer.setOpacity) tempLayer.setOpacity(0);
                 if(tempLayer.setStyle) tempLayer.setStyle({opacity: 0, fillOpacity: 0});
-                
-                // 2. สร้างวงกลมสีสวยๆ มาหลอกตาผู้ใช้วางทับตำแหน่งเดิม
+                if(tempLayer.options) tempLayer.options.interactive = false; // ทำให้คลิกไม่โดนด้วย
+
+                // สร้างหมุดวงกลมสีตาม Layer วางทับตำแหน่งเดิม
                 visualLayer = L.circleMarker(tempLayer.getLatLng(), { color: lInfo.color, radius: 8, fillColor: lInfo.color, fillOpacity: 0.8 }).addTo(map);
             } else { 
                 tempLayer.setStyle({ color: lInfo.color, weight: 4 }); 
@@ -423,11 +429,11 @@
             });
             formHtml += `<div class="flex gap-2 mt-2"><button onclick="cancelNewFeature()" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button><button onclick="confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-blue-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button></div></div>`;
             
-            // 3. ผูกหน้าต่าง Popup ให้ตรงกับวงกลมสีๆ (ถ้าเป็นจุด)
+            // ผูกหน้าต่างกับหมุดวงกลมที่เราสร้างมาใหม่
             const targetPopupLayer = visualLayer ? visualLayer : tempLayer;
             targetPopupLayer.bindPopup(formHtml).openPopup();
 
-            // 4. ถ้ากดปิดหน้าต่างโดยไม่เซฟ ลบทิ้งทั้งคู่แบบเนียนๆ
+            // จัดการล้างขยะบนจอเวลากดยกเลิก หรือปิดหน้าต่าง
             targetPopupLayer.on('popupclose', function() {
                 setTimeout(() => {
                     if (window.tempLayer && !window.tempLayer._isSaved) {
@@ -450,8 +456,10 @@
 
         window.toggleEdit = function(id) { document.getElementById(`view_${id}`).classList.toggle('hidden'); document.getElementById(`edit_${id}`).classList.toggle('hidden'); };
 
-        window.updateFeature = function(id, btnEvent) {
+        window.updateFeature = async function(id, btnEvent) {
             try {
+                isProcessing = true; // หยุด Auto-update ชั่วคราว
+
                 const featureIndex = allFeatures.findIndex(f => String(f.properties.id) === String(id));
                 if(featureIndex === -1) return;
 
@@ -460,22 +468,32 @@
 
                 if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`input_${id}_${f.name}`); if(el) props[f.name] = el.value; }); }
 
+                // อัปเดตข้อมูลบนจอทันที
                 allFeatures[featureIndex].properties = props;
-                btnEvent.target.innerHTML = '<i class="fa-solid fa-check"></i>'; 
-
-                setTimeout(() => { map.closePopup(); renderFeaturesOnMap(); refreshActiveTable(); }, 200);
-
+                btnEvent.target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; 
+                
                 const geojsonData = { type: "Feature", geometry: feature.geometry, properties: props };
-                fetch(`/api/features/${id}?v=${new Date().getTime()}`, {
+                
+                // ส่งคำสั่งอัปเดตไปหลังบ้าน
+                await fetch(`/api/features/${id}?v=${new Date().getTime()}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ properties: props, geojson: geojsonData })
-                }).catch(e => console.error(e));
+                });
 
-            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); }
+                map.closePopup(); 
+                await fetchFeatures(); // โหลดใหม่ยืนยันข้อมูล
+                refreshActiveTable(); 
+
+            } catch (err) { 
+                alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); 
+            } finally {
+                isProcessing = false; // เปิด Auto-update กลับมา
+            }
         };
 
         window.confirmSaveNewFeature = async function(layerName) {
             try {
                 if(!window.tempLayer) return;
+                isProcessing = true; // ล็อก Auto-update
                 window.tempLayer._isSaved = true; 
                 
                 const lInfo = appLayers.find(l => l.name === layerName); const properties = {};
@@ -492,19 +510,42 @@
                 window.tempLayer = null; window.tempVisualLayer = null;
                 
                 await fetchFeatures(); refreshActiveTable(); 
-            } catch (err) { alert(err.message); }
+            } catch (err) { 
+                alert(err.message); 
+            } finally {
+                isProcessing = false; // ปลดล็อก
+            }
         }
 
-        window.deleteFeature = function(id) { 
+        // 🌟 ลบข้อมูลปุ๊บ หมุดหายทันที แบบสมบูรณ์แบบ
+        window.deleteFeature = async function(id) { 
             if (confirm('คุณต้องการลบพิกัดนี้ถาวรใช่หรือไม่?')) { 
-                map.closePopup(); 
-                allFeatures = allFeatures.filter(f => String(f.properties.id) !== String(id));
-                renderFeaturesOnMap();
-                refreshActiveTable();
-                fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' })
-                    .then(res => res.json())
-                    .then(result => { if(result.status !== 'success') console.error("ลบข้อมูลเซิร์ฟเวอร์ไม่สำเร็จ"); })
-                    .catch(err => console.error("Error Delete:", err));
+                try {
+                    isProcessing = true; // 🚦 สั่งหยุด Auto-update เพื่อไม่ให้มันดึงหมุดที่เพิ่งลบไปกลับมาโชว์!
+                    
+                    map.closePopup(); 
+                    // ลบหมุดออกจากความทรงจำหน้าจอ
+                    allFeatures = allFeatures.filter(f => String(f.properties.id) !== String(id));
+                    
+                    // สั่งวาดแผนที่ใหม่ หมุดหายวับไปทันที!
+                    renderFeaturesOnMap();
+                    refreshActiveTable();
+                    
+                    // รอลบข้อมูลที่หลังบ้านให้เสร็จ 100%
+                    const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' });
+                    const result = await response.json();
+                    
+                    if(result.status !== 'success') throw new Error("เซิร์ฟเวอร์ตอบกลับว่าลบไม่สำเร็จ");
+                    
+                    // พอลบเสร็จแล้ว ค่อยดึงข้อมูลใหม่มาเตรียมไว้
+                    await fetchFeatures();
+
+                } catch (err) {
+                    console.error("Error Delete:", err);
+                    alert("ลบข้อมูลผิดพลาด โปรดรีเฟรชหน้าเว็บ");
+                } finally {
+                    isProcessing = false; // 🚦 เปิดไฟเขียว ให้ระบบ Auto-update ทำงานต่อได้ปกติ
+                }
             } 
         }
 
