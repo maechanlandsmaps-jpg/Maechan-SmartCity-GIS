@@ -218,7 +218,15 @@
         const map = L.map('map', { center: [20.1525, 99.8475], zoom: 15, layers: [osmLayer], zoomControl: false, maxZoom: 22 });
         L.control.zoom({ position: 'topleft' }).addTo(map);
         L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
-        map.pm.addControls({ position: 'topleft', drawCircleMarker: false, drawCircle: false, drawText: false });
+        
+        // 🌟 ปิดระบบวาดหมุดแบบ Pin (สีน้ำเงิน) ถาวร! และเปิดระบบวาดหมุดวงกลม (CircleMarker) แทนครับ
+        map.pm.addControls({ 
+            position: 'topleft', 
+            drawMarker: false,          // ปิดหมุดพินสีน้ำเงิน
+            drawCircleMarker: true,     // เปิดหมุดวงกลม
+            drawCircle: false, 
+            drawText: false 
+        });
 
         let highlightedLayer = null; let highlightedOriginalStyle = null;
         map.on('popupopen', function(e) {
@@ -237,7 +245,7 @@
 
         let appLayers = []; let layerGroups = {}; let allFeatures = [];
         let currentAnalyticsLayer = ''; let bufferGroup = L.layerGroup().addTo(map);
-        let lastFeaturesString = ""; // ตัวแปรจำสถานะข้อมูลสำหรับระบบ Auto-Update
+        let lastFeaturesString = ""; 
 
         function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
         function formatArea(sqm) { const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4; let text = ''; if (rai > 0) text += rai + ' ไร่ '; if (ngan > 0) text += ngan + ' งาน '; if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.'; return text.trim(); }
@@ -358,35 +366,32 @@
             try {
                 const res = await fetch('/api/features?v=' + new Date().getTime(), { cache: 'no-store', headers: { 'Pragma': 'no-cache' } }); 
                 const text = await res.text();
-                lastFeaturesString = text; // จำสถานะไว้เผื่อเทียบตอน Auto-Update
+                lastFeaturesString = text; 
                 const data = JSON.parse(text);
                 allFeatures = data.features;
                 renderFeaturesOnMap();
             } catch (err) { console.error("Error fetching features: ", err); }
         }
 
-        // 🔄 ระบบ Auto-Update ตามที่คุณนิดสั่ง! (ดึงข้อมูลเงียบๆ ทุก 2.5 วินาที)
+        // 🔄 ระบบ Auto-Update ทุก 2 วินาทีเป๊ะๆ!
         setInterval(async () => {
-            // ดึงข้อมูลเฉพาะตอนที่ไม่ได้เปิดหน้าต่างแก้ไข หรือยังวาดหมุดใหม่ไม่เสร็จ
             if (!window.tempLayer && !highlightedLayer) {
                 try {
                     const res = await fetch('/api/features?v=' + new Date().getTime(), { cache: 'no-store' }); 
                     const text = await res.text();
                     
-                    // เช็กว่าถ้าข้อมูลใหม่ ไม่เหมือนของเดิม (มีคนลบ/เพิ่มข้อมูล) ค่อยสั่งวาดใหม่
                     if (text !== lastFeaturesString) {
                         lastFeaturesString = text;
                         const data = JSON.parse(text);
                         allFeatures = data.features;
                         renderFeaturesOnMap();
                         refreshActiveTable();
-                        console.log("Auto-Updated Maps Data.");
                     }
                 } catch (err) {}
             }
-        }, 2500);
+        }, 2000);
 
-        // 🌟 แก้บั๊ก Geoman ขัดข้อง! (ปล่อยให้มันใช้วงกลมเดิมไปก่อนตอนวาด จะได้ไม่ Error)
+        // 🌟 แก้ระบบวาดใหม่หมด! ใช้ CircleMarker ตรงๆ ไม่ต้องแอบลบหมุดน้ำเงินให้ Error
         map.pm.setLang('th');
         map.on('pm:create', async (e) => {
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
@@ -394,9 +399,12 @@
             const lInfo = appLayers.find(l => l.name === activeRadio.value);
             
             let tempLayer = e.layer;
-            // เปลี่ยนสีให้เป็นไปตามเลเยอร์เฉยๆ ไม่ลบทิ้ง
-            if (e.shape !== "Marker" && e.shape !== "CircleMarker") {
-                tempLayer.setStyle({ color: lInfo.color, weight: 4 }); 
+            
+            // 🌟 ปรับสีและหน้าตาของหมุดวงกลม หรือเส้น ให้ตรงกับเลเยอร์ที่คุณนิดเลือก
+            if (e.shape === "CircleMarker") {
+                tempLayer.setStyle({ color: lInfo.color, radius: 8, fillColor: lInfo.color, fillOpacity: 0.8, weight: 2 });
+            } else {
+                tempLayer.setStyle({ color: lInfo.color, weight: 4 });
             }
             
             window.tempLayer = tempLayer;
@@ -412,8 +420,7 @@
             });
             formHtml += `<div class="flex gap-2 mt-2"><button onclick="cancelNewFeature()" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button><button onclick="confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-blue-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button></div></div>`;
             
-            // รอจังหวะแป๊บนึงให้ Geoman สร้าง ID เสร็จ ค่อยเปิด Popup (ป้องกัน Error _leaflet_id)
-            setTimeout(() => { tempLayer.bindPopup(formHtml).openPopup(); }, 100);
+            tempLayer.bindPopup(formHtml).openPopup();
 
             tempLayer.on('popupclose', function() {
                 setTimeout(() => {
