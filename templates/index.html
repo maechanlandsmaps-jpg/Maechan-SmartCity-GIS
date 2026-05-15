@@ -103,7 +103,6 @@
     </aside>
 
     <main class="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
-        
         <button onclick="window.toggleSidebar()" class="md:hidden absolute top-4 right-4 z-[40] bg-white text-slate-800 w-10 h-10 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition">
             <i class="fa-solid fa-bars text-lg"></i>
         </button>
@@ -225,7 +224,6 @@
     </div>
 
     <script>
-        // --- 1. การดึงค่าพิกัดแผนที่เดิม ---
         let defaultCenter = [20.1525, 99.8475];
         let defaultZoom = 15;
         try {
@@ -259,7 +257,6 @@
             window.saveMapStateAndReload();
         };
 
-        // --- 2. ตัวแปรเก็บข้อมูล ---
         let highlightedLayer = null; let highlightedOriginalStyle = null;
         let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
         let activeLayerState = localStorage.getItem('maechanActiveLayer');
@@ -279,7 +276,6 @@
             }).filter(f => f !== null && f.geometry && f.geometry.type);
         };
 
-        // --- 3. ฟังก์ชันอรรถประโยชน์ ---
         window.getPinIcon = function(color) {
             const html = `<div style="width: 28px; height: 28px; background-color: ${color}; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid #ffffff; box-shadow: 2px 2px 6px rgba(0,0,0,0.5); position: relative; left: -14px; top: -28px;"><div style="width: 10px; height: 10px; background-color: #ffffff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div></div>`;
             return L.divIcon({ html: html, className: 'custom-pin-marker', iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, -32] });
@@ -289,7 +285,6 @@
         window.formatArea = function(sqm) { const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4; let text = ''; if (rai > 0) text += rai + ' ไร่ '; if (ngan > 0) text += ngan + ' งาน '; if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.'; return text.trim(); }
         window.getMeasurementBadge = function(geojson) { try { if (geojson.geometry.type === 'LineString' || geojson.geometry.type === 'MultiLineString') { return `<div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-blue-100 shadow-sm"><i class="fa-solid fa-ruler-horizontal mr-1"></i> ความยาว: ${window.formatDistance(turf.length(geojson, {units: 'meters'}))}</div>`; } else if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') { return `<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-emerald-100 shadow-sm"><i class="fa-solid fa-draw-polygon mr-1"></i> พื้นที่: ${window.formatArea(turf.area(geojson))}</div>`; } } catch(e) { console.error(e); } return ''; }
 
-        // 🌟 อัปเดตป้ายแจ้งเตือนเลเยอร์ปัจจุบันบนหน้าจอ 🌟
         window.updateActiveLayerBadge = function() {
             const activeName = localStorage.getItem('maechanActiveLayer');
             const badge = document.getElementById('active-layer-badge');
@@ -327,7 +322,6 @@
             if (highlightedLayer && highlightedOriginalStyle) { highlightedLayer.setStyle(highlightedOriginalStyle); highlightedLayer = null; highlightedOriginalStyle = null; }
         });
 
-        // --- 4. ดึงข้อมูลครั้งแรก ---
         window.fetchLayers = async function() {
             try {
                 const res = await fetch('/api/layers?v=' + new Date().getTime(), { cache: 'no-store' });
@@ -349,7 +343,6 @@
                     let labelBtnColor = labelIsActive ? 'text-amber-400' : 'text-slate-400';
                     const safeNameAttr = layer.name.replace(/"/g, '&quot;');
 
-                    // 🌟 เพิ่มคำสั่งให้อัปเดตป้ายเตือนทันทีที่เปลี่ยนเลเยอร์
                     container.innerHTML += `
                         <div class="relative group mb-2">
                             <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value); window.updateGeomanStyle(); window.updateActiveLayerBadge();">
@@ -370,7 +363,7 @@
                 });
                 
                 window.updateGeomanStyle();
-                window.updateActiveLayerBadge(); // 🌟 อัปเดตป้ายสถานะตอนโหลดแอปครั้งแรก
+                window.updateActiveLayerBadge(); 
                 
                 const resFeat = await fetch(`/api/features?v=${new Date().getTime()}`, { cache: 'no-store' }); 
                 const dataFeat = await resFeat.json();
@@ -380,7 +373,6 @@
             } catch (err) { console.error("Error fetching layers: ", err); }
         };
 
-        // 🌟 เปลี่ยนสไตล์ Geoman ล่วงหน้า เพื่อป้องกันหมุดสีน้ำเงิน
         window.updateGeomanStyle = function() {
             const activeName = localStorage.getItem('maechanActiveLayer');
             if (activeName && appLayers.length > 0) {
@@ -401,6 +393,12 @@
 
         window.renderFeaturesOnMap = function() {
             Object.values(layerGroups).forEach(g => g.clearLayers());
+
+            map.eachLayer((layer) => {
+                if (layer.feature && layer.feature.properties && layer.feature.properties.layer_name) {
+                    map.removeLayer(layer);
+                }
+            });
 
             L.geoJSON({ type: "FeatureCollection", features: allFeatures }, {
                 pointToLayer: (f, latlng) => {
@@ -463,14 +461,48 @@
             });
         };
 
+        // 🌟 เพิ่มระบบดึงข้อมูลอัตโนมัติแบบมีตัวล็อก 1.5 วินาที
+        let isPopupOpen = false;
+        let isProcessing = false;
+        setInterval(async () => {
+            const isDrawing = (map.pm.Draw.Marker && map.pm.Draw.Marker.enabled()) || (map.pm.Draw.Line && map.pm.Draw.Line.enabled()) || (map.pm.Draw.Polygon && map.pm.Draw.Polygon.enabled());
+            
+            // 🚦 ถ้าระบบไม่ได้มี Popup เปิดอยู่ ไม่ได้วาด และไม่ได้กำลังเซฟ/ลบ ถึงจะดึงข้อมูล
+            if (!window.tempLayer && !isPopupOpen && !isDrawing && !isProcessing) {
+                try {
+                    const res = await fetch(`/api/features?v=${new Date().getTime()}${Math.random()}`, { cache: 'no-store' }); 
+                    const text = await res.text();
+                    
+                    if (text !== lastFeaturesString) {
+                        lastFeaturesString = text;
+                        const data = JSON.parse(text);
+                        allFeatures = window.normalizeFeatures(data.features);
+                        window.renderFeaturesOnMap();
+                        window.refreshActiveTable();
+                    }
+                } catch (err) {}
+            }
+        }, 1500);
+
         // --- 5. จัดการเหตุการณ์ปักหมุด ---
         map.pm.setLang('th');
         map.on('pm:create', async (e) => {
+            map.pm.disableDraw(); 
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
             if (!activeRadio) { alert("กรุณาสร้างหรือเลือกชั้นข้อมูลก่อนครับ"); map.removeLayer(e.layer); return; }
             const lInfo = appLayers.find(l => l.name === activeRadio.value);
             
-            let tempLayer = e.layer;
+            let tempLayer;
+            if (e.shape === "Marker") {
+                const latlng = e.layer.getLatLng();
+                try { map.removeLayer(e.layer); } catch(err){}
+                try { e.layer.remove(); } catch(err){}
+                tempLayer = L.marker(latlng, { icon: window.getPinIcon(lInfo.color) }).addTo(map);
+            } else { 
+                tempLayer = e.layer;
+                if(tempLayer.setStyle) tempLayer.setStyle({ color: lInfo.color, weight: 4 }); 
+            }
+            
             window.tempLayer = tempLayer;
             window.tempLayer._isSaved = false; 
             
@@ -487,12 +519,13 @@
             });
             formHtml += `<div class="flex gap-2 mt-2 pt-2 border-t border-slate-100"><button onclick="window.cancelNewFeature()" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button><button onclick="window.confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-emerald-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button></div></div>`;
             
-            setTimeout(() => { tempLayer.bindPopup(formHtml, { minWidth: 240, maxWidth: 300 }).openPopup(); }, 50);
+            setTimeout(() => { tempLayer.bindPopup(formHtml, { minWidth: 240, maxWidth: 300 }).openPopup(); }, 100);
 
             tempLayer.on('popupclose', function() {
                 setTimeout(() => {
                     if (window.tempLayer === tempLayer && !window.tempLayer._isSaved) {
                         try { map.removeLayer(tempLayer); } catch(err){}
+                        try { tempLayer.remove(); } catch(err){}
                         window.tempLayer = null;
                     }
                 }, 100);
@@ -500,15 +533,20 @@
         });
 
         window.cancelNewFeature = function() {
-            if(window.tempLayer) { try { map.removeLayer(window.tempLayer); } catch(err){} window.tempLayer = null; }
+            if(window.tempLayer) { 
+                try { map.removeLayer(window.tempLayer); } catch(err){}
+                try { window.tempLayer.remove(); } catch(err){}
+                window.tempLayer = null; 
+            }
             map.closePopup();
         };
 
-        // --- 6. ระบบบันทึก, แก้ไข และลบข้อมูล (เซฟเสร็จ รีเฟรชทันที) ---
+        // --- 6. ระบบบันทึก, แก้ไข และลบข้อมูล (เซฟ/ลบเสร็จ รีเฟรชทันที) ---
         window.toggleEdit = function(id) { document.getElementById(`view_${id}`).classList.toggle('hidden'); document.getElementById(`edit_${id}`).classList.toggle('hidden'); };
 
         window.updateFeature = async function(id, btnEvent) {
             try {
+                isProcessing = true;
                 const featureIndex = allFeatures.findIndex(f => String(f.properties.id) === String(id));
                 if(featureIndex === -1) return;
 
@@ -526,12 +564,49 @@
 
                 window.saveMapStateAndReload(); 
 
-            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); window.hideLoading(); }
+            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); window.hideLoading(); isProcessing = false; }
+        };
+
+        // 🌟 แก้ไขฟังก์ชันอัปเดตเลเยอร์ให้บันทึกสีสำเร็จ (ใช้คำสั่ง PUT แบบ RESTful)
+        window.saveLayer = async function(e) { 
+            e.preventDefault(); 
+            window.showLoading('กำลังบันทึกและเปลี่ยนสีชั้นข้อมูล...'); 
+            const oldName = document.getElementById('edit_layer_name_old').value;
+            const name = document.getElementById('new_layer_name').value; 
+            const color = document.getElementById('new_layer_color').value; 
+            const type = document.getElementById('new_layer_type').value; 
+            const fields = []; 
+            document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); 
+            
+            const payload = { name: name, color: color, type: type, fields: fields };
+            if (oldName) payload.old_name = oldName;
+
+            try {
+                if (oldName) {
+                    // 🌟 ส่งคำสั่งแก้ไข (PUT) ไปที่เซิร์ฟเวอร์
+                    let res = await fetch(`/api/layers/${encodeURIComponent(oldName)}`, { 
+                        method: 'PUT', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify(payload) 
+                    });
+                    // ถ้าเซิร์ฟเวอร์ไม่รองรับ PUT ให้ลองส่ง POST ไปทับ
+                    if (!res.ok) {
+                        await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    }
+                } else {
+                    // 🌟 สร้างใหม่ (POST)
+                    await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                }
+            } catch (err) { console.error(err); }
+            
+            // หน่วงเวลาให้ฐานข้อมูลเซฟสีใหม่ให้เสร็จ 0.5 วิ ค่อยรีเฟรชหน้าจอ
+            setTimeout(() => { window.saveMapStateAndReload(); }, 500);
         };
 
         window.confirmSaveNewFeature = async function(layerName) {
             try {
                 if(!window.tempLayer) return;
+                isProcessing = true;
                 
                 const lInfo = appLayers.find(l => l.name === layerName); const properties = {};
                 if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`new_f_${f.name}`); if(el) properties[f.name] = el.value; }); }
@@ -545,12 +620,13 @@
                 
                 window.saveMapStateAndReload(); 
                 
-            } catch (err) { alert(err.message); window.hideLoading(); }
+            } catch (err) { alert(err.message); window.hideLoading(); isProcessing = false; }
         };
 
         window.deleteFeature = async function(id) { 
             if (confirm('คุณต้องการลบพิกัดนี้ถาวรใช่หรือไม่?')) { 
                 try {
+                    isProcessing = true;
                     window.showLoading('กำลังลบข้อมูลและซิงค์แผนที่...');
                     
                     const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' });
@@ -560,7 +636,7 @@
                     window.saveMapStateAndReload(); 
 
                 } catch (err) {
-                    console.error("Error Delete:", err); alert("ลบข้อมูลผิดพลาด"); window.hideLoading();
+                    console.error("Error Delete:", err); alert("ลบข้อมูลผิดพลาด"); window.hideLoading(); isProcessing = false;
                 }
             } 
         };
@@ -736,7 +812,7 @@
                 await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: layerName, color: '#3b82f6', type: geojson.features[0].geometry.type === 'Point' ? 'Point' : 'Line', fields: autoFields }) });
                 
                 for(let f of geojson.features) { await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: f.properties, geojson: f.geometry }) }); }
-                alert("นำเข้าข้อมูลสำเร็จ!"); window.saveMapStateAndReload();
+                alert("นำเข้าข้อมูลสำเร็จ!"); window.fetchLayers();
             } catch (err) { alert("Error: " + err.message); window.hideLoading(); event.target.value = ''; }
         };
 
@@ -747,7 +823,6 @@
         
         window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; window.addFieldRow('ชื่อ'); window.addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); window.toggleModal('layerModal'); };
         window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); if(!l) { alert('ไม่พบข้อมูล'); return; } document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => window.addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); window.toggleModal('layerModal'); };
-        window.saveLayer = async function(e) { e.preventDefault(); window.showLoading('กำลังบันทึกชั้นข้อมูล...'); const name = document.getElementById('new_layer_name').value; const color = document.getElementById('new_layer_color').value; const type = document.getElementById('new_layer_type').value; const fields = []; document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color, type, fields }) }); window.saveMapStateAndReload(); };
         window.deleteCurrentLayer = async function(name) { if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { window.showLoading('กำลังลบชั้นข้อมูล...'); await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); window.saveMapStateAndReload(); } };
         window.exportGeoJSON = function() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures })); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); };
         
