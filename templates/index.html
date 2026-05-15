@@ -26,7 +26,9 @@
         body { font-family: 'Prompt', sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100%; z-index: 10; transition: height 0.3s ease; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .leaflet-popup-content { font-family: 'Prompt', sans-serif; margin: 12px 14px; min-width: 220px !important; }
+        
+        /* จัด Layout ให้ Popup กว้างพอดีและไม่บีบช่องกรอกข้อมูล */
+        .leaflet-popup-content { font-family: 'Prompt', sans-serif; margin: 12px; min-width: 240px !important; }
         
         .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
         
@@ -45,7 +47,7 @@
         .leaflet-tooltip-left.custom-map-label::before { border-left-color: rgba(255,255,255,0.95); }
         .leaflet-tooltip-right.custom-map-label::before { border-right-color: rgba(255,255,255,0.95); }
         
-        /* 🌟 คลาสสำหรับหมุดหยดน้ำ (เอาพื้นหลังขาวทิ้ง) */
+        /* เอาพื้นหลังขาวของ Leaflet ออกจากหมุดหยดน้ำของเรา */
         .custom-pin-marker { background: transparent !important; border: none !important; }
     </style>
 </head>
@@ -223,10 +225,10 @@
         L.control.zoom({ position: 'topleft' }).addTo(map);
         L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
         
-        // 🚫 ปิดเครื่องมือที่ไม่จำเป็น ป้องกันบั๊ก
+        // เครื่องมือ Geoman
         map.pm.addControls({ 
             position: 'topleft', 
-            drawMarker: true,          // เปิดปุ่มปักหมุดปกติ
+            drawMarker: true,          
             drawCircleMarker: false,   
             drawPolyline: true,        
             drawPolygon: true,         
@@ -235,12 +237,15 @@
             editMode: false,           
             dragMode: false,           
             cutPolygon: false,         
-            removalMode: false         // บังคับให้ลบจากหน้าต่าง Popup เท่านั้นเพื่อความชัวร์
+            removalMode: false // ปิดยางลบ บังคับลบผ่าน Popup เท่านั้น
         });
 
-        // --- 2. ตัวแปรของระบบ ---
+        // --- 2. ตัวแปรเก็บข้อมูล (State Management) ---
+        // ใช้ markerStore เก็บอ้างอิงของหมุดแต่ละตัวด้วย ID เพื่อให้ตามลบได้เจาะจง ไม่ต้องล้างกระดาน
+        let markerStore = {}; 
         let highlightedLayer = null; 
         let highlightedOriginalStyle = null;
+
         let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
         let activeLayerState = localStorage.getItem('maechanActiveLayer');
         let labelFieldState = JSON.parse(localStorage.getItem('maechanLabelFieldState')) || {};
@@ -250,45 +255,24 @@
         let allFeatures = [];
         let currentAnalyticsLayer = ''; 
         let bufferGroup = L.layerGroup().addTo(map);
-        let lastFeaturesString = ""; 
-        let isProcessing = false; // 🚦 ล็อกไว้ ไม่ให้ Auto Update ทำงานตอนเซฟ/ลบ
 
-        // --- 3. ฟังก์ชันอรรถประโยชน์ขั้นเทพ ---
+        // --- 3. ฟังก์ชันสร้างกราฟิก ---
         window.getPinIcon = function(color) {
-            // 📍 สร้างหมุดรูปหยดน้ำ 100% ไม่มีเงาขยะของ Leaflet ติดมาด้วย
             const html = `<div style="width: 28px; height: 28px; background-color: ${color}; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid #ffffff; box-shadow: 2px 2px 6px rgba(0,0,0,0.5); position: relative; left: -14px; top: -28px;"><div style="width: 10px; height: 10px; background-color: #ffffff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div></div>`;
-            return L.divIcon({ 
-                html: html, 
-                className: 'custom-pin-marker', 
-                iconSize: [0, 0], 
-                iconAnchor: [0, 0], 
-                popupAnchor: [0, -32] 
-            });
-        };
-
-        // 🌟 อัปเดตสีของไอคอนวาดหมุด Geoman ให้ตรงกับเลเยอร์ตั้งแต่ตอนขยับเมาส์
-        window.updateGeomanStyle = function() {
-            const activeRadio = document.querySelector('input[name="active_layer"]:checked');
-            if (activeRadio && appLayers.length > 0) {
-                const lInfo = appLayers.find(l => l.name === activeRadio.value);
-                if (lInfo) {
-                    map.pm.setGlobalOptions({
-                        markerStyle: { icon: window.getPinIcon(lInfo.color) },
-                        pathOptions: { color: lInfo.color, weight: 4 }
-                    });
-                }
-            }
+            return L.divIcon({ html: html, className: 'custom-pin-marker', iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, -32] });
         };
 
         window.formatDistance = function(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
         window.formatArea = function(sqm) { const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4; let text = ''; if (rai > 0) text += rai + ' ไร่ '; if (ngan > 0) text += ngan + ' งาน '; if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.'; return text.trim(); }
         window.getMeasurementBadge = function(geojson) { try { if (geojson.geometry.type === 'LineString' || geojson.geometry.type === 'MultiLineString') { return `<div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-blue-100 shadow-sm"><i class="fa-solid fa-ruler-horizontal mr-1"></i> ความยาว: ${window.formatDistance(turf.length(geojson, {units: 'meters'}))}</div>`; } else if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') { return `<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-emerald-100 shadow-sm"><i class="fa-solid fa-draw-polygon mr-1"></i> พื้นที่: ${window.formatArea(turf.area(geojson))}</div>`; } } catch(e) { console.error(e); } return ''; }
 
+        // --- 4. การจัดการเมนูและโหลด ---
         window.toggleSidebar = function() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); document.getElementById('mobile-overlay').classList.toggle('hidden'); setTimeout(() => document.getElementById('mobile-overlay').classList.toggle('opacity-0'), 10); }
         window.toggleModal = function(id) { const modal = document.getElementById(id); if(modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); } }
         window.showLoading = function(msg = 'กำลังประมวลผล...') { document.getElementById('loadingText').innerText = msg; document.getElementById('loadingModal').classList.remove('hidden'); }
         window.hideLoading = function() { document.getElementById('loadingModal').classList.add('hidden'); }
 
+        // ป้องกันสีตอนเปิดหน้าต่าง
         map.on('popupopen', function(e) {
             const layer = e.popup._source; if (!layer) return; 
             if (layer.setStyle && !(layer instanceof L.Marker)) {
@@ -301,16 +285,17 @@
             if (highlightedLayer && highlightedOriginalStyle) { highlightedLayer.setStyle(highlightedOriginalStyle); highlightedLayer = null; highlightedOriginalStyle = null; }
         });
 
-        // --- 4. ดึงข้อมูล ---
+        // --- 5. จัดการเลเยอร์และวาดแผนที่ ---
         window.fetchLayers = async function() {
             try {
-                const res = await fetch('/api/layers?v=' + new Date().getTime(), { cache: 'no-store', headers: { 'Pragma': 'no-cache' } });
+                const res = await fetch('/api/layers?v=' + new Date().getTime(), { cache: 'no-store' });
                 appLayers = await res.json();
                 const container = document.getElementById('layer-container');
                 container.innerHTML = '';
                 
                 Object.values(layerGroups).forEach(g => { g.clearLayers(); map.removeLayer(g); });
                 layerGroups = {}; 
+                markerStore = {}; // ล้างข้อมูลความจำหมุดเดิมทิ้ง
                 
                 appLayers.forEach((layer, index) => {
                     layerGroups[layer.name] = L.featureGroup();
@@ -325,7 +310,7 @@
 
                     container.innerHTML += `
                         <div class="relative group mb-2">
-                            <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value); window.updateGeomanStyle();">
+                            <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value);">
                             <div class="flex items-center justify-between p-2.5 bg-slate-800 rounded-xl border-2 border-transparent transition group-hover:bg-slate-700">
                                 <label for="radio_${index}" class="flex items-center gap-2 cursor-pointer flex-1 w-full overflow-hidden pr-2">
                                     <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle shrink-0" data-layer="${safeNameAttr}" onchange="window.toggleLayerVisibility(this)">
@@ -341,8 +326,7 @@
                             </div>
                         </div>`;
                 });
-                window.updateGeomanStyle();
-                await window.fetchFeatures();
+                await window.fetchFeaturesInit();
             } catch (err) { console.error("Error fetching layers: ", err); }
         };
 
@@ -351,115 +335,86 @@
         window.saveLabelSettings = function() { const layerName = document.getElementById('label_layer_name').value; const field = document.getElementById('label_field_select').value; labelFieldState[layerName] = field; localStorage.setItem('maechanLabelFieldState', JSON.stringify(labelFieldState)); window.toggleModal('labelModal'); window.fetchLayers(); }
         window.turnOffLabels = function() { const layerName = document.getElementById('label_layer_name').value; delete labelFieldState[layerName]; localStorage.setItem('maechanLabelFieldState', JSON.stringify(labelFieldState)); window.toggleModal('labelModal'); window.fetchLayers(); }
 
-        window.renderFeaturesOnMap = function() {
-            Object.values(layerGroups).forEach(g => g.clearLayers());
+        // ฟังก์ชันวาดแผนที่แบบจำเพาะเจาะจง
+        window.plotSingleFeature = function(f) {
+            const id = f.properties.id; 
+            const layerName = f.properties.layer_name; 
+            const lInfo = appLayers.find(l => l.name === layerName);
+            if (!lInfo || !layerGroups[layerName]) return;
 
-            L.geoJSON({ type: "FeatureCollection", features: allFeatures }, {
-                pointToLayer: (f, latlng) => {
-                    const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
-                    const color = lInfo ? lInfo.color : '#3388ff';
-                    return L.marker(latlng, { icon: window.getPinIcon(color) });
-                },
-                style: (f) => {
-                    const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
-                    return { color: lInfo ? lInfo.color : '#3388ff', weight: 4 };
-                },
-                onEachFeature: (f, layer) => {
-                    const id = f.properties.id; const layerName = f.properties.layer_name; const lInfo = appLayers.find(l => l.name === layerName);
-                    let badgeHtml = window.getMeasurementBadge(f);
-                    
-                    let displayHtml = `<div style="width: 100%; box-sizing: border-box;" id="view_${id}">
-                        <h3 class="font-bold border-b pb-1 mb-2 text-emerald-600">${layerName || 'ข้อมูล'}</h3>${badgeHtml}<div class="text-xs mb-3 space-y-1">`;
-                    
-                    let editHtml = `<div style="width: 100%; box-sizing: border-box;" class="hidden" id="edit_${id}">
-                        <h3 class="font-bold border-b pb-1 mb-2 text-amber-500"><i class="fa-solid fa-pen mr-1"></i>แก้ไขข้อมูล</h3>${badgeHtml}<div class="text-xs mb-3">`;
+            let layer;
+            if (f.geometry.type === 'Point') {
+                const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+                layer = L.marker(latlng, { icon: window.getPinIcon(lInfo.color) });
+            } else {
+                layer = L.geoJSON(f, { style: { color: lInfo.color, weight: 4 } });
+            }
 
-                    if(lInfo && lInfo.fields) {
-                        lInfo.fields.forEach(field => {
-                            const val = f.properties[field.name] || ''; const iType = field.type === 'Number' ? 'number' : (field.type === 'Date' ? 'date' : 'text');
-                            displayHtml += `<p><span class="font-bold text-slate-500">${field.name}:</span> <span class="break-words">${val}</span></p>`;
-                            editHtml += `<div style="margin-bottom: 8px;">
-                                <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${field.name}</label>
-                                <input type="${iType}" id="input_${id}_${field.name}" value="${val}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">
-                            </div>`;
-                        });
-                    }
+            let badgeHtml = window.getMeasurementBadge(f);
+            
+            // 🌟 Layout Popup แบบเต็มจอ จัดระเบียบสวยงาม
+            let displayHtml = `<div style="width: 100%; box-sizing: border-box;" id="view_${id}">
+                <h3 class="font-bold border-b pb-1 mb-2 text-emerald-600">${layerName || 'ข้อมูล'}</h3>${badgeHtml}<div class="text-xs mb-3 space-y-1">`;
+            
+            let editHtml = `<div style="width: 100%; box-sizing: border-box;" class="hidden" id="edit_${id}">
+                <h3 class="font-bold border-b pb-1 mb-2 text-amber-500"><i class="fa-solid fa-pen mr-1"></i>แก้ไขข้อมูล</h3>${badgeHtml}<div class="text-xs mb-3">`;
 
-                    displayHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2"><button onclick="window.toggleEdit(${id})" class="flex-1 bg-amber-50 text-amber-600 py-1.5 rounded text-[10px] font-bold border border-amber-100 hover:bg-amber-500 hover:text-white transition"><i class="fa-solid fa-pen"></i> แก้ไข</button><button onclick="window.deleteFeature(${id})" class="flex-1 bg-red-50 text-red-500 py-1.5 rounded text-[10px] font-bold border border-red-100 hover:bg-red-500 hover:text-white transition"><i class="fa-solid fa-trash"></i> ลบ</button></div></div>`;
-                    editHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2"><button onclick="map.closePopup();" class="flex-1 bg-slate-100 text-slate-600 py-1.5 rounded text-[10px] font-bold hover:bg-slate-200 transition">ยกเลิก</button><button onclick="window.updateFeature(${id}, event)" class="flex-1 bg-emerald-500 text-white py-1.5 rounded text-[10px] font-bold shadow-md hover:bg-emerald-600 transition"><i class="fa-solid fa-save"></i> บันทึก</button></div></div>`;
+            if(lInfo && lInfo.fields) {
+                lInfo.fields.forEach(field => {
+                    const val = f.properties[field.name] || ''; const iType = field.type === 'Number' ? 'number' : (field.type === 'Date' ? 'date' : 'text');
+                    displayHtml += `<p><span class="font-bold text-slate-500">${field.name}:</span> <span class="break-words">${val}</span></p>`;
+                    editHtml += `<div style="margin-bottom: 8px;">
+                        <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${field.name}</label>
+                        <input type="${iType}" id="input_${id}_${field.name}" value="${val}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">
+                    </div>`;
+                });
+            }
 
-                    layer.feature = f;
-                    layer.bindPopup(`<div>${displayHtml}${editHtml}</div>`, { minWidth: 220, maxWidth: 300 });
-                    
-                    if (labelFieldState[layerName]) {
-                        const fieldName = labelFieldState[layerName];
-                        const text = fieldName === 'id' ? String(id) : (f.properties[fieldName] ? String(f.properties[fieldName]) : '-');
-                        layer.bindTooltip(text, { permanent: true, direction: 'auto', className: 'custom-map-label' });
-                    }
+            displayHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2"><button onclick="window.toggleEdit(${id})" class="flex-1 bg-amber-50 text-amber-600 py-1.5 rounded text-[10px] font-bold border border-amber-100 hover:bg-amber-500 hover:text-white transition"><i class="fa-solid fa-pen"></i> แก้ไข</button><button onclick="window.deleteFeature(${id})" class="flex-1 bg-red-50 text-red-500 py-1.5 rounded text-[10px] font-bold border border-red-100 hover:bg-red-500 hover:text-white transition"><i class="fa-solid fa-trash"></i> ลบ</button></div></div>`;
+            editHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2"><button onclick="map.closePopup();" class="flex-1 bg-slate-100 text-slate-600 py-1.5 rounded text-[10px] font-bold hover:bg-slate-200 transition">ยกเลิก</button><button onclick="window.updateFeature(${id}, event)" class="flex-1 bg-emerald-500 text-white py-1.5 rounded text-[10px] font-bold shadow-md hover:bg-emerald-600 transition"><i class="fa-solid fa-save"></i> บันทึก</button></div></div>`;
 
-                    if (layerGroups[layerName]) {
-                        layerGroups[layerName].addLayer(layer);
-                        if (f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) {
-                            try {
-                                const coords = turf.coordAll(f);
-                                if (coords.length > 1) {
-                                    const start = coords[0]; const end = coords[coords.length - 1]; const color = lInfo ? lInfo.color : '#3388ff';
-                                    const nodeStyle = { radius: 4, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: 1, interactive: false };
-                                    layerGroups[layerName].addLayer(L.circleMarker([start[1], start[0]], nodeStyle));
-                                    layerGroups[layerName].addLayer(L.circleMarker([end[1], end[0]], nodeStyle));
-                                }
-                            } catch(e){}
-                        }
-                    }
-                }
-            });
+            layer.feature = f;
+            layer.bindPopup(`<div>${displayHtml}${editHtml}</div>`, { minWidth: 240, maxWidth: 320 });
+            
+            if (labelFieldState[layerName]) {
+                const fieldName = labelFieldState[layerName];
+                const text = fieldName === 'id' ? String(id) : (f.properties[fieldName] ? String(f.properties[fieldName]) : '-');
+                layer.bindTooltip(text, { permanent: true, direction: 'auto', className: 'custom-map-label' });
+            }
+
+            // จัดเก็บลงหน่วยความจำ จะได้ตามลบได้ถูกตัว
+            markerStore[id] = layer;
+            layerGroups[layerName].addLayer(layer);
         };
 
-        window.fetchFeatures = async function() {
+        window.fetchFeaturesInit = async function() {
             try {
-                const res = await fetch(`/api/features?v=${new Date().getTime()}${Math.random()}`, { cache: 'no-store', headers: { 'Pragma': 'no-cache' } }); 
-                const text = await res.text();
-                lastFeaturesString = text; 
-                const data = JSON.parse(text);
+                const res = await fetch(`/api/features?v=${new Date().getTime()}`, { cache: 'no-store' }); 
+                const data = await res.json();
                 allFeatures = data.features;
-                window.renderFeaturesOnMap();
+                allFeatures.forEach(f => window.plotSingleFeature(f));
             } catch (err) { console.error("Error fetching features: ", err); }
         };
 
-        // ⏱️ ระบบ Auto-Update (ดึงข้อมูลทุก 1.5 วินาที เป๊ะๆ ตามคำสั่ง)
-        setInterval(async () => {
-            // 🚦 จะอัปเดตก็ต่อเมื่อ ไม่มี Popup เปิดอยู่, ไม่ได้กำลังวาด, และไม่ได้กำลังบันทึกข้อมูล!
-            const hasOpenPopup = !!document.querySelector('.leaflet-popup');
-            const isDrawing = (map.pm.Draw.Marker && map.pm.Draw.Marker.enabled()) || 
-                              (map.pm.Draw.Line && map.pm.Draw.Line.enabled()) || 
-                              (map.pm.Draw.Polygon && map.pm.Draw.Polygon.enabled());
-
-            if (!hasOpenPopup && !isDrawing && !isProcessing) {
-                try {
-                    const res = await fetch(`/api/features?v=${new Date().getTime()}${Math.random()}`, { cache: 'no-store' }); 
-                    const text = await res.text();
-                    
-                    if (text !== lastFeaturesString) {
-                        lastFeaturesString = text;
-                        const data = JSON.parse(text);
-                        allFeatures = data.features;
-                        window.renderFeaturesOnMap();
-                        window.refreshActiveTable();
-                    }
-                } catch (err) {}
-            }
-        }, 1500); 
-
-        // --- 5. จัดการเหตุการณ์ปักหมุด ---
-        map.pm.setLang('th');
+        // --- 6. การปักหมุด ---
         map.on('pm:create', async (e) => {
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
             if (!activeRadio) { alert("กรุณาสร้างหรือเลือกชั้นข้อมูลก่อนครับ"); map.removeLayer(e.layer); return; }
             const lInfo = appLayers.find(l => l.name === activeRadio.value);
             
-            let tempLayer = e.layer;
+            let tempLayer;
+            
+            // 🌟 ฆ่าหมุด Geoman ทิ้งทันที แล้วสร้างใหม่ของเราเอง
+            if (e.shape === "Marker") {
+                const latlng = e.layer.getLatLng();
+                map.removeLayer(e.layer); // เตะออก!
+                tempLayer = L.marker(latlng, { icon: window.getPinIcon(lInfo.color) }).addTo(map);
+            } else { 
+                tempLayer = e.layer;
+                if(tempLayer.setStyle) tempLayer.setStyle({ color: lInfo.color, weight: 4 }); 
+            }
+            
             window.tempLayer = tempLayer;
-            window.tempLayer._isSaved = false; 
             
             const geojsonForMeasurement = tempLayer.toGeoJSON ? tempLayer.toGeoJSON() : null;
             let badgeHtml = geojsonForMeasurement ? window.getMeasurementBadge(geojsonForMeasurement) : '';
@@ -474,12 +429,13 @@
             });
             formHtml += `<div class="flex gap-2 mt-2 pt-2 border-t border-slate-100"><button onclick="window.cancelNewFeature()" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button><button onclick="window.confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-emerald-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button></div></div>`;
             
-            tempLayer.bindPopup(formHtml, { minWidth: 220, maxWidth: 300 }).openPopup();
+            setTimeout(() => { tempLayer.bindPopup(formHtml, { minWidth: 240, maxWidth: 300 }).openPopup(); }, 50);
 
+            // กดกากบาทปิดหน้าต่าง = ลบทิ้ง
             tempLayer.on('popupclose', function() {
                 setTimeout(() => {
-                    if (window.tempLayer === tempLayer && !window.tempLayer._isSaved) {
-                        try { map.removeLayer(tempLayer); } catch(err){}
+                    if (window.tempLayer === tempLayer) {
+                        map.removeLayer(tempLayer);
                         window.tempLayer = null;
                     }
                 }, 100);
@@ -487,19 +443,15 @@
         });
 
         window.cancelNewFeature = function() {
-            if(window.tempLayer) { 
-                try { map.removeLayer(window.tempLayer); } catch(err){}
-                window.tempLayer = null; 
-            }
+            if(window.tempLayer) { map.removeLayer(window.tempLayer); window.tempLayer = null; }
             map.closePopup();
         };
 
-        // --- 6. ระบบลบและบันทึกข้อมูล (ลบหายวับแบบถอนรากถอนโคน 100%) ---
+        // --- 7. การบันทึก ลบ แก้ไข (เจาะจงเป้าหมาย) ---
         window.toggleEdit = function(id) { document.getElementById(`view_${id}`).classList.toggle('hidden'); document.getElementById(`edit_${id}`).classList.toggle('hidden'); };
 
         window.updateFeature = async function(id, btnEvent) {
             try {
-                isProcessing = true; 
                 const featureIndex = allFeatures.findIndex(f => String(f.properties.id) === String(id));
                 if(featureIndex === -1) return;
 
@@ -512,22 +464,27 @@
                 btnEvent.target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; 
                 
                 const geojsonData = { type: "Feature", geometry: feature.geometry, properties: props };
+                
+                // ลบหมุดเก่าบนจอ แล้ววาดใหม่ทันที
+                if (markerStore[id]) {
+                    layerGroups[feature.properties.layer_name].removeLayer(markerStore[id]);
+                    map.removeLayer(markerStore[id]);
+                }
+                window.plotSingleFeature(allFeatures[featureIndex]);
+                map.closePopup(); 
+                window.refreshActiveTable(); 
+
+                // อัปเดตหลังบ้าน
                 await fetch(`/api/features/${id}?v=${new Date().getTime()}`, {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ properties: props, geojson: geojsonData })
                 });
 
-                map.closePopup(); 
-                await window.fetchFeatures();
-                window.refreshActiveTable(); 
-
-            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); } finally { setTimeout(() => { isProcessing = false; }, 500); }
+            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); }
         };
 
         window.confirmSaveNewFeature = async function(layerName) {
             try {
                 if(!window.tempLayer) return;
-                isProcessing = true; 
-                window.tempLayer._isSaved = true; 
                 
                 const lInfo = appLayers.find(l => l.name === layerName); const properties = {};
                 if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`new_f_${f.name}`); if(el) properties[f.name] = el.value; }); }
@@ -535,55 +492,54 @@
                 const geojson = window.tempLayer.toGeoJSON ? window.tempLayer.toGeoJSON() : { type: "Feature", geometry: { type: "Point", coordinates: [window.tempLayer.getLatLng().lng, window.tempLayer.getLatLng().lat] } };
                 document.querySelector('.leaflet-popup-content').innerHTML = '<div class="text-center p-4"><i class="fa-solid fa-spinner fa-spin text-blue-500 text-xl"></i></div>';
                 
+                // สั่งลบหมุดชั่วคราวออกไป
+                const tempLayerRef = window.tempLayer;
+                window.tempLayer = null; 
+
                 const response = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: properties, geojson: geojson }) });
                 const data = await response.json(); if(data.status !== 'success') throw new Error("เกิดข้อผิดพลาดในการบันทึก");
                 
-                if(window.tempLayer) {
-                    try { map.removeLayer(window.tempLayer); } catch(err){}
-                    window.tempLayer = null; 
-                }
+                map.removeLayer(tempLayerRef);
                 
-                await window.fetchFeatures(); window.refreshActiveTable(); 
-            } catch (err) { alert(err.message); } finally { setTimeout(() => { isProcessing = false; }, 500); }
+                // โหลดข้อมูลล่าสุดมาวาดใหม่
+                await fetch(`/api/features?v=${new Date().getTime()}`).then(r=>r.json()).then(d => {
+                    allFeatures = d.features;
+                    Object.values(layerGroups).forEach(g => { g.clearLayers(); });
+                    markerStore = {};
+                    allFeatures.forEach(f => window.plotSingleFeature(f));
+                });
+                window.refreshActiveTable(); 
+            } catch (err) { alert(err.message); }
         };
 
+        // 🌟 ลบเจาะจงเป้าหมาย หายวับทันที 100% ไม่มีเด้งกลับ!
         window.deleteFeature = async function(id) { 
             if (confirm('คุณต้องการลบพิกัดนี้ถาวรใช่หรือไม่?')) { 
                 try {
-                    isProcessing = true; // 🚦 ตัดไฟระบบ Auto-Update ป้องกันหมุดเด้งกลับมาผีหลอก
                     map.closePopup(); 
                     
-                    // 1. ระเบิดหมุดเป้าหมายออกจากแผนที่ให้เกลี้ยง (เตะออกแบบระบุตัวตน)
-                    Object.values(layerGroups).forEach(g => {
-                        g.eachLayer(layer => {
-                            if (layer.feature && String(layer.feature.properties.id) === String(id)) {
-                                g.removeLayer(layer);
-                                map.removeLayer(layer);
-                            }
-                        });
-                    });
-
-                    // 2. ลบออกจากหน่วยความจำหน้าจอทันที
+                    // 1. ระเบิดหมุดออกจากหน้าจอทันทีโดยเจาะจง ID
+                    const feature = allFeatures.find(f => String(f.properties.id) === String(id));
+                    if (feature && markerStore[id]) {
+                        layerGroups[feature.properties.layer_name].removeLayer(markerStore[id]);
+                        map.removeLayer(markerStore[id]);
+                        delete markerStore[id]; // ล้างความจำทิ้ง
+                    }
+                    
+                    // 2. เอาออกจาก Array
                     allFeatures = allFeatures.filter(f => String(f.properties.id) !== String(id));
                     window.refreshActiveTable();
                     
-                    // 3. ยิงคำสั่งบอกเซิร์ฟเวอร์ให้ลบข้อมูลจริงทิ้งไปซะ
-                    const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' });
-                    const result = await response.json();
-                    if(result.status !== 'success') throw new Error("เซิร์ฟเวอร์ลบข้อมูลไม่สำเร็จ");
+                    // 3. ยิงคำสั่งบอกเซิร์ฟเวอร์
+                    fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' }).catch(err => console.error("Error Delete:", err));
                     
-                    // 4. โหลดข้อมูลใหม่มายืนยันความสะอาด
-                    await window.fetchFeatures();
-
                 } catch (err) {
-                    console.error("Error Delete:", err); alert("ลบข้อมูลผิดพลาด โปรดรีเฟรชหน้าเว็บ");
-                } finally {
-                    isProcessing = false; // 🚦 เปิดไฟให้ Auto-update กลับมาทำงานได้ตามปกติ
+                    console.error(err); alert("ระบบลบข้อมูลขัดข้อง");
                 }
             } 
         };
 
-        // --- 7. ระบบตาราง และส่วนอื่นๆ ที่เหลือ ---
+        // --- 8. ตารางและการซูม ---
         window.refreshActiveTable = function() {
             const activeLayerEl = document.getElementById('current-table-layer');
             if(!activeLayerEl) return;
@@ -594,6 +550,59 @@
             }
         };
 
+        window.zoomToFeature = function(id) {
+            const targetMarker = markerStore[id];
+            if (targetMarker) {
+                if(window.innerWidth < 768) { window.closeTable(); }
+                const feature = allFeatures.find(f => String(f.properties.id) === String(id));
+                const layerName = feature.properties.layer_name;
+                
+                // เปิดเลเยอร์ถ้ามันถูกซ่อนอยู่
+                if (!layerVisibilityState[layerName]) {
+                    const safeNameAttr = layerName.replace(/"/g, '&quot;');
+                    const checkbox = document.querySelector(`input[data-layer="${safeNameAttr}"]`);
+                    if(checkbox) { checkbox.checked = true; window.toggleLayerVisibility(checkbox); }
+                }
+                const center = targetMarker.getBounds ? targetMarker.getBounds().getCenter() : targetMarker.getLatLng();
+                map.flyTo(center, 18, { duration: 0.5 }); 
+                setTimeout(() => { targetMarker.openPopup(); }, 600); // 👈 เปิด Popup ของตัวจริง ไม่ก๊อปปี้!
+            }
+        };
+
+        window.editFeatureFromTable = function(id) {
+            window.closeTable(); window.zoomToFeature(id);
+            setTimeout(() => {
+                const viewEl = document.getElementById(`view_${id}`); const editEl = document.getElementById(`edit_${id}`);
+                if (viewEl && editEl) { viewEl.classList.add('hidden'); editEl.classList.remove('hidden'); }
+            }, 800); 
+        };
+
+        window.openTable = function(layerName) {
+            try {
+                const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
+                document.getElementById('current-table-layer').innerText = layerName;
+                
+                const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center w-24">จัดการ</th></tr>'; head.innerHTML = headHtml;
+                
+                const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
+                featuresInLayer.forEach(f => {
+                    bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="window.zoomToFeature(${f.properties.id})">`;
+                    bodyHtml += `<td class="p-2 border-r text-center text-slate-400">${f.properties.id}</td>`;
+                    if (layerInfo.fields) { layerInfo.fields.forEach(field => { bodyHtml += `<td class="p-2 border-r">${f.properties[field.name] || '-'}</td>`; }); }
+                    bodyHtml += `<td class="p-2 text-center whitespace-nowrap">
+                        <button onclick="event.stopPropagation(); window.editFeatureFromTable(${f.properties.id})" class="text-amber-500 hover:text-amber-600 mr-2" title="แก้ไขข้อมูล"><i class="fa-solid fa-pen pointer-events-none"></i></button>
+                        <button onclick="event.stopPropagation(); window.deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600" title="ลบข้อมูล"><i class="fa-solid fa-trash-can pointer-events-none"></i></button>
+                    </td></tr>`;
+                });
+                body.innerHTML = bodyHtml || `<tr><td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">ไม่มีข้อมูล</td></tr>`;
+                panel.classList.add('open'); mapEl.style.height = window.innerWidth < 768 ? '55vh' : '65vh'; setTimeout(() => map.invalidateSize(), 300);
+            } catch (error) { alert("เกิดข้อผิดพลาดในการเปิดตาราง: " + error.message); }
+        };
+        
+        window.closeTable = function() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); };
+        window.filterTable = function() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } };
+
+        // --- 9. ส่วนแสดงผลอื่นๆ (สถิติ รัศมี นำเข้า) ---
         window.drawCombinedAnalysis = function() {
             bufferGroup.clearLayers(); const activeRadio = document.querySelector('input[name="active_layer"]:checked'); if (!activeRadio) return;
             const activeName = activeRadio.value; const selectedRadius = parseInt(document.getElementById('bufferRadiusSelect').value);
@@ -670,62 +679,6 @@
             new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); 
         };
 
-        // 🌟 แก้ระบบซูมจากตาราง ไม่ต้องสร้างหมุดผีตอนกดดูข้อมูล
-        window.zoomToFeature = function(id) {
-            let targetLayer = null;
-            Object.values(layerGroups).forEach(group => { 
-                group.eachLayer(layer => { 
-                    if (layer.feature && layer.feature.properties && String(layer.feature.properties.id) === String(id)) { targetLayer = layer; } 
-                }); 
-            });
-
-            if (targetLayer) {
-                if(window.innerWidth < 768) { window.closeTable(); }
-                const layerName = targetLayer.feature.properties.layer_name;
-                if (!layerVisibilityState[layerName]) {
-                    const safeNameAttr = layerName.replace(/"/g, '&quot;');
-                    const checkbox = document.querySelector(`input[data-layer="${safeNameAttr}"]`);
-                    if(checkbox) { checkbox.checked = true; window.toggleLayerVisibility(checkbox); }
-                }
-                const center = targetLayer.getBounds ? targetLayer.getBounds().getCenter() : targetLayer.getLatLng();
-                map.flyTo(center, 18, { duration: 0.5 }); 
-                setTimeout(() => { targetLayer.openPopup(); }, 600); // 👈 เปิด Popup เฉยๆ ไม่ได้สร้างหมุดเพิ่ม
-            }
-        };
-
-        window.editFeatureFromTable = function(id) {
-            window.closeTable(); window.zoomToFeature(id);
-            setTimeout(() => {
-                const viewEl = document.getElementById(`view_${id}`); const editEl = document.getElementById(`edit_${id}`);
-                if (viewEl && editEl) { viewEl.classList.add('hidden'); editEl.classList.remove('hidden'); }
-            }, 800); 
-        };
-
-        window.openTable = function(layerName) {
-            try {
-                const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
-                document.getElementById('current-table-layer').innerText = layerName;
-                
-                const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center w-24">จัดการ</th></tr>'; head.innerHTML = headHtml;
-                
-                const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
-                featuresInLayer.forEach(f => {
-                    bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="window.zoomToFeature(${f.properties.id})">`;
-                    bodyHtml += `<td class="p-2 border-r text-center text-slate-400">${f.properties.id}</td>`;
-                    if (layerInfo.fields) { layerInfo.fields.forEach(field => { bodyHtml += `<td class="p-2 border-r">${f.properties[field.name] || '-'}</td>`; }); }
-                    bodyHtml += `<td class="p-2 text-center whitespace-nowrap">
-                        <button onclick="event.stopPropagation(); window.editFeatureFromTable(${f.properties.id})" class="text-amber-500 hover:text-amber-600 mr-2" title="แก้ไขข้อมูล"><i class="fa-solid fa-pen pointer-events-none"></i></button>
-                        <button onclick="event.stopPropagation(); window.deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600" title="ลบข้อมูล"><i class="fa-solid fa-trash-can pointer-events-none"></i></button>
-                    </td></tr>`;
-                });
-                body.innerHTML = bodyHtml || `<tr><td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">ไม่มีข้อมูล</td></tr>`;
-                panel.classList.add('open'); mapEl.style.height = window.innerWidth < 768 ? '55vh' : '65vh'; setTimeout(() => map.invalidateSize(), 300);
-            } catch (error) { alert("เกิดข้อผิดพลาดในการเปิดตาราง: " + error.message); }
-        };
-        
-        window.closeTable = function() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); };
-        window.filterTable = function() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } };
-
         window.importShpHandler = async function(event) {
             const file = event.target.files[0]; if (!file) return;
             let layerNamePrompt = prompt("ตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); if (!layerNamePrompt) { event.target.value = ''; return; }
@@ -778,7 +731,7 @@
         window.deleteCurrentLayer = async function(name) { if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); location.reload(); } };
         window.exportGeoJSON = function() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures })); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); };
         
-        // --- 8. สั่งให้เริ่มต้นทำงาน ---
+        // --- 10. สั่งเริ่มทำงาน ---
         window.fetchLayers();
     </script>
 </body>
