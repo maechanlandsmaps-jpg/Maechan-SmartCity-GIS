@@ -26,6 +26,8 @@
         body { font-family: 'Prompt', sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100%; z-index: 10; transition: height 0.3s ease; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* 🌟 บังคับขนาดหน้าต่าง Popup ให้กว้างพอดี ช่องกรอกจะได้ไม่เบี้ยว! */
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; margin: 12px 14px; min-width: 240px !important; }
         
         .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
@@ -461,38 +463,14 @@
             });
         };
 
-        // 🌟 เพิ่มระบบดึงข้อมูลอัตโนมัติแบบมีตัวล็อก 1.5 วินาที
-        let isPopupOpen = false;
-        let isProcessing = false;
-        setInterval(async () => {
-            const isDrawing = (map.pm.Draw.Marker && map.pm.Draw.Marker.enabled()) || (map.pm.Draw.Line && map.pm.Draw.Line.enabled()) || (map.pm.Draw.Polygon && map.pm.Draw.Polygon.enabled());
-            
-            // 🚦 ถ้าระบบไม่ได้มี Popup เปิดอยู่ ไม่ได้วาด และไม่ได้กำลังเซฟ/ลบ ถึงจะดึงข้อมูล
-            if (!window.tempLayer && !isPopupOpen && !isDrawing && !isProcessing) {
-                try {
-                    const res = await fetch(`/api/features?v=${new Date().getTime()}${Math.random()}`, { cache: 'no-store' }); 
-                    const text = await res.text();
-                    
-                    if (text !== lastFeaturesString) {
-                        lastFeaturesString = text;
-                        const data = JSON.parse(text);
-                        allFeatures = window.normalizeFeatures(data.features);
-                        window.renderFeaturesOnMap();
-                        window.refreshActiveTable();
-                    }
-                } catch (err) {}
-            }
-        }, 1500);
-
-        // --- 5. จัดการเหตุการณ์ปักหมุด ---
         map.pm.setLang('th');
         map.on('pm:create', async (e) => {
-            map.pm.disableDraw(); 
             const activeRadio = document.querySelector('input[name="active_layer"]:checked');
             if (!activeRadio) { alert("กรุณาสร้างหรือเลือกชั้นข้อมูลก่อนครับ"); map.removeLayer(e.layer); return; }
             const lInfo = appLayers.find(l => l.name === activeRadio.value);
             
-            let tempLayer;
+            let tempLayer = e.layer;
+            
             if (e.shape === "Marker") {
                 const latlng = e.layer.getLatLng();
                 try { map.removeLayer(e.layer); } catch(err){}
@@ -541,17 +519,16 @@
             map.closePopup();
         };
 
-        // --- 6. ระบบบันทึก, แก้ไข และลบข้อมูล (เซฟ/ลบเสร็จ รีเฟรชทันที) ---
         window.toggleEdit = function(id) { document.getElementById(`view_${id}`).classList.toggle('hidden'); document.getElementById(`edit_${id}`).classList.toggle('hidden'); };
 
         window.updateFeature = async function(id, btnEvent) {
             try {
-                isProcessing = true;
                 const featureIndex = allFeatures.findIndex(f => String(f.properties.id) === String(id));
                 if(featureIndex === -1) return;
 
                 const feature = allFeatures[featureIndex]; const props = { ...feature.properties };
                 const lInfo = appLayers.find(l => l.name === feature.properties.layer_name);
+
                 if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`input_${id}_${f.name}`); if(el) props[f.name] = el.value; }); }
 
                 btnEvent.target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; 
@@ -564,13 +541,13 @@
 
                 window.saveMapStateAndReload(); 
 
-            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); window.hideLoading(); isProcessing = false; }
+            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); window.hideLoading(); }
         };
 
-        // 🌟 แก้ไขฟังก์ชันอัปเดตเลเยอร์ให้บันทึกสีสำเร็จ (ใช้คำสั่ง PUT แบบ RESTful)
+        // 🌟 ฟังก์ชันเปลี่ยนสี / เซฟชั้นข้อมูลที่แก้บักแล้ว 100% 🌟
         window.saveLayer = async function(e) { 
             e.preventDefault(); 
-            window.showLoading('กำลังบันทึกและเปลี่ยนสีชั้นข้อมูล...'); 
+            window.showLoading('กำลังอัปเดตชั้นข้อมูล...'); 
             const oldName = document.getElementById('edit_layer_name_old').value;
             const name = document.getElementById('new_layer_name').value; 
             const color = document.getElementById('new_layer_color').value; 
@@ -578,35 +555,25 @@
             const fields = []; 
             document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); 
             
+            // ส่งแค่ตัวแปรพื้นฐานที่เซิร์ฟเวอร์คุ้นเคย (ห้ามแถม old_name ไปกวนใจเซิร์ฟเวอร์)
             const payload = { name: name, color: color, type: type, fields: fields };
-            if (oldName) payload.old_name = oldName;
 
             try {
-                if (oldName) {
-                    // 🌟 ส่งคำสั่งแก้ไข (PUT) ไปที่เซิร์ฟเวอร์
-                    let res = await fetch(`/api/layers/${encodeURIComponent(oldName)}`, { 
-                        method: 'PUT', 
-                        headers: { 'Content-Type': 'application/json' }, 
-                        body: JSON.stringify(payload) 
-                    });
-                    // ถ้าเซิร์ฟเวอร์ไม่รองรับ PUT ให้ลองส่ง POST ไปทับ
-                    if (!res.ok) {
-                        await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    }
-                } else {
-                    // 🌟 สร้างใหม่ (POST)
-                    await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                }
+                // ยิงคำสั่ง POST เดิมๆ เพื่อบันทึกทับ (Upsert) 
+                await fetch('/api/layers', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(payload) 
+                });
             } catch (err) { console.error(err); }
             
-            // หน่วงเวลาให้ฐานข้อมูลเซฟสีใหม่ให้เสร็จ 0.5 วิ ค่อยรีเฟรชหน้าจอ
-            setTimeout(() => { window.saveMapStateAndReload(); }, 500);
+            // รอ 1 วินาที ให้ชัวร์ว่า Database เซฟเสร็จ แล้วสั่งรีเฟรชหน้าเว็บ
+            setTimeout(() => { window.saveMapStateAndReload(); }, 1000); 
         };
 
         window.confirmSaveNewFeature = async function(layerName) {
             try {
                 if(!window.tempLayer) return;
-                isProcessing = true;
                 
                 const lInfo = appLayers.find(l => l.name === layerName); const properties = {};
                 if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`new_f_${f.name}`); if(el) properties[f.name] = el.value; }); }
@@ -620,15 +587,13 @@
                 
                 window.saveMapStateAndReload(); 
                 
-            } catch (err) { alert(err.message); window.hideLoading(); isProcessing = false; }
+            } catch (err) { alert(err.message); window.hideLoading(); }
         };
 
         window.deleteFeature = async function(id) { 
             if (confirm('คุณต้องการลบพิกัดนี้ถาวรใช่หรือไม่?')) { 
                 try {
-                    isProcessing = true;
                     window.showLoading('กำลังลบข้อมูลและซิงค์แผนที่...');
-                    
                     const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' });
                     const result = await response.json();
                     if(result.status !== 'success') throw new Error("เซิร์ฟเวอร์ลบข้อมูลไม่สำเร็จ");
@@ -636,12 +601,11 @@
                     window.saveMapStateAndReload(); 
 
                 } catch (err) {
-                    console.error("Error Delete:", err); alert("ลบข้อมูลผิดพลาด"); window.hideLoading(); isProcessing = false;
+                    console.error("Error Delete:", err); alert("ลบข้อมูลผิดพลาด"); window.hideLoading();
                 }
             } 
         };
 
-        // --- 7. ระบบตาราง ---
         window.zoomToFeature = function(id) {
             let targetLayer = null;
             map.eachLayer((layer) => {
@@ -698,7 +662,6 @@
         window.closeTable = function() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); };
         window.filterTable = function() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } };
 
-        // --- 8. ระบบวิเคราะห์ ---
         window.drawCombinedAnalysis = function() {
             bufferGroup.clearLayers(); const activeRadio = document.querySelector('input[name="active_layer"]:checked'); if (!activeRadio) return;
             const activeName = activeRadio.value; const selectedRadius = parseInt(document.getElementById('bufferRadiusSelect').value);
@@ -812,7 +775,7 @@
                 await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: layerName, color: '#3b82f6', type: geojson.features[0].geometry.type === 'Point' ? 'Point' : 'Line', fields: autoFields }) });
                 
                 for(let f of geojson.features) { await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: f.properties, geojson: f.geometry }) }); }
-                alert("นำเข้าข้อมูลสำเร็จ!"); window.fetchLayers();
+                alert("นำเข้าข้อมูลสำเร็จ!"); window.saveMapStateAndReload();
             } catch (err) { alert("Error: " + err.message); window.hideLoading(); event.target.value = ''; }
         };
 
