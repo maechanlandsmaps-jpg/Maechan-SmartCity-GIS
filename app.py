@@ -10,11 +10,8 @@ app = Flask(__name__)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db_connection():
-    # 🔥 เพิ่ม connect_timeout=5 เพื่อให้มันเลิกรอถ้านานเกินไป เซิร์ฟเวอร์จะได้ไม่ล่มตอน Render ตรวจสอบ
+    # ใช้ connect_timeout=5 เพื่อป้องกันเซิร์ฟเวอร์ค้าง
     return psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=5)
-
-# ✂️ ดิฉันตัดฟังก์ชัน init_db() ตอนเปิดเว็บออกไปแล้วครับ 
-# เพราะเราสร้างตารางไปหมดแล้ว ไม่จำเป็นต้องให้เซิร์ฟเวอร์เสียเวลารอเช็กซ้ำทุกครั้งที่โหลดใหม่ครับ
 
 @app.route('/')
 def index():
@@ -36,14 +33,33 @@ def add_layer():
     conn = get_db_connection()
     c = conn.cursor()
     try:
-        fields_str = json.dumps([{"name": f["name"], "type": f["type"]} for f in data.get('fields', [])])
-        c.execute("INSERT INTO layers (name, color, type, fields) VALUES (%s, %s, %s, %s)", 
-                  (data['name'], data['color'], data['type'], fields_str))
+        # 🚀 แก้ไขสำคัญ: รับค่า fields ทั้งก้อน (รวม options ของ Dropdown ด้วย) ไม่ตัดทิ้งแล้ว! 🚀
+        fields_str = json.dumps(data.get('fields', []))
+        
+        old_name = data.get('old_name')
+        new_name = data['name']
+        
+        # 🚀 อัปเกรด: ถ้าระบุ old_name แปลว่าเป็นการกดปุ่ม "แก้ไข" ชั้นข้อมูลเดิม
+        if old_name and old_name != new_name:
+            c.execute("UPDATE layers SET name=%s, color=%s, type=%s, fields=%s WHERE name=%s",
+                      (new_name, data['color'], data['type'], fields_str, old_name))
+            # อัปเดตตาราง features ให้ชื่อชั้นข้อมูลตรงกันด้วย
+            c.execute("UPDATE features SET layer_name=%s WHERE layer_name=%s", (new_name, old_name))
+        else:
+            # 🚀 ถ้าชื่อเดิม หรือสร้างใหม่ ให้ใช้ ON CONFLICT เพื่ออัปเดตข้อมูลทับของเดิม (UPSERT)
+            c.execute("""
+                INSERT INTO layers (name, color, type, fields) 
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (name) DO UPDATE 
+                SET color = EXCLUDED.color, type = EXCLUDED.type, fields = EXCLUDED.fields
+            """, (new_name, data['color'], data['type'], fields_str))
+        
         conn.commit()
         return jsonify({"status": "success"})
-    except errors.UniqueViolation:
+    except Exception as e:
         conn.rollback()
-        return jsonify({"status": "error_duplicate"})
+        print("Layer Save Error:", e)
+        return jsonify({"status": "error", "message": str(e)})
     finally:
         c.close()
         conn.close()
