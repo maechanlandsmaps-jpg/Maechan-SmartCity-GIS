@@ -27,7 +27,6 @@
         #map { height: 100vh; width: 100%; z-index: 10; transition: height 0.3s ease; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* 🌟 บังคับขนาดหน้าต่าง Popup ให้กว้างพอดี ช่องกรอกจะได้ไม่เบี้ยว! */
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; margin: 12px 14px; min-width: 240px !important; }
         
         .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
@@ -424,12 +423,31 @@
 
                     if(lInfo && lInfo.fields) {
                         lInfo.fields.forEach(field => {
-                            const val = f.properties[field.name] || ''; const iType = field.type === 'Number' ? 'number' : (field.type === 'Date' ? 'date' : 'text');
+                            const val = f.properties[field.name] || ''; 
+                            
+                            // ฝั่งดูข้อมูล
                             displayHtml += `<p><span class="font-bold text-slate-500">${field.name}:</span> <span class="break-words">${val}</span></p>`;
+                            
+                            // ฝั่งแก้ไข (สร้าง Dropdown หากระบุ) 🚀
                             editHtml += `<div style="margin-bottom: 8px;">
-                                <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${field.name}</label>
-                                <input type="${iType}" id="input_${id}_${field.name}" value="${val}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">
-                            </div>`;
+                                <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${field.name}</label>`;
+                            
+                            if (field.type === 'Dropdown' && field.options) {
+                                // ถ้าประเภทเป็น Dropdown ให้สร้าง select
+                                editHtml += `<select id="input_${id}_${field.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif; background: #fff;">`;
+                                editHtml += `<option value="">-- เลือกข้อมูล --</option>`;
+                                field.options.forEach(opt => {
+                                    const selected = (val === opt) ? 'selected' : '';
+                                    editHtml += `<option value="${opt}" ${selected}>${opt}</option>`;
+                                });
+                                editHtml += `</select>`;
+                            } else {
+                                // ถ้าไม่ใช่ ให้สร้าง input text, number, date ปกติ
+                                let iType = field.type === 'Number' ? 'number' : (field.type === 'Date' ? 'date' : 'text');
+                                editHtml += `<input type="${iType}" id="input_${id}_${field.name}" value="${val}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">`;
+                            }
+                            
+                            editHtml += `</div>`;
                         });
                     }
 
@@ -488,12 +506,25 @@
             let badgeHtml = geojsonForMeasurement ? window.getMeasurementBadge(geojsonForMeasurement) : '';
 
             let formHtml = `<div style="width: 100%; box-sizing: border-box;"><div class="mb-3"><span class="text-[10px] font-bold text-white px-2 py-1 rounded uppercase tracking-wide" style="background-color: ${lInfo.color}">${lInfo.name}</span></div>${badgeHtml}`;
+            
             lInfo.fields.forEach(f => {
-                let iType = f.type === 'Number' ? 'number' : (f.type === 'Date' ? 'date' : 'text');
                 formHtml += `<div style="margin-bottom: 8px;">
-                    <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${f.name}</label>
-                    <input type="${iType}" id="new_f_${f.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">
-                </div>`;
+                    <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${f.name}</label>`;
+                
+                // 🚀 สร้าง Dropdown หากประเภทข้อมูลเป็น Dropdown 🚀
+                if (f.type === 'Dropdown' && f.options) {
+                    formHtml += `<select id="new_f_${f.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif; background: #fff;">`;
+                    formHtml += `<option value="">-- เลือกข้อมูล --</option>`;
+                    f.options.forEach(opt => {
+                        formHtml += `<option value="${opt}">${opt}</option>`;
+                    });
+                    formHtml += `</select>`;
+                } else {
+                    let iType = f.type === 'Number' ? 'number' : (f.type === 'Date' ? 'date' : 'text');
+                    formHtml += `<input type="${iType}" id="new_f_${f.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">`;
+                }
+                
+                formHtml += `</div>`;
             });
             formHtml += `<div class="flex gap-2 mt-2 pt-2 border-t border-slate-100"><button onclick="window.cancelNewFeature()" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button><button onclick="window.confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-emerald-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button></div></div>`;
             
@@ -544,22 +575,31 @@
             } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); window.hideLoading(); }
         };
 
-        // 🌟 ฟังก์ชันเปลี่ยนสี / เซฟชั้นข้อมูลที่แก้บักแล้ว 100% 🌟
+        // 🚀 อัปเดตฟังก์ชันเพื่อส่งข้อมูล Dropdown ไปหลังบ้าน 🚀
         window.saveLayer = async function(e) { 
             e.preventDefault(); 
             window.showLoading('กำลังอัปเดตชั้นข้อมูล...'); 
-            const oldName = document.getElementById('edit_layer_name_old').value;
             const name = document.getElementById('new_layer_name').value; 
             const color = document.getElementById('new_layer_color').value; 
             const type = document.getElementById('new_layer_type').value; 
             const fields = []; 
-            document.querySelectorAll('.field-name-input').forEach((el, i) => fields.push({name: el.value, type: document.querySelectorAll('.field-type-input')[i].value})); 
             
-            // ส่งแค่ตัวแปรพื้นฐานที่เซิร์ฟเวอร์คุ้นเคย (ห้ามแถม old_name ไปกวนใจเซิร์ฟเวอร์)
+            document.querySelectorAll('.field-name-input').forEach((el, i) => {
+                let fieldType = document.querySelectorAll('.field-type-input')[i].value;
+                let fieldOptionsText = document.querySelectorAll('.dropdown-options-input input')[i].value;
+                
+                // ถ้าระบุว่าเป็น Dropdown ให้แปลง Text ที่คั่นด้วยลูกน้ำ เป็น Array
+                if (fieldType === 'Dropdown') {
+                    let opts = fieldOptionsText.split(',').map(s => s.trim()).filter(s => s !== '');
+                    fields.push({ name: el.value, type: fieldType, options: opts });
+                } else {
+                    fields.push({ name: el.value, type: fieldType });
+                }
+            }); 
+            
             const payload = { name: name, color: color, type: type, fields: fields };
 
             try {
-                // ยิงคำสั่ง POST เดิมๆ เพื่อบันทึกทับ (Upsert) 
                 await fetch('/api/layers', { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
@@ -567,7 +607,6 @@
                 });
             } catch (err) { console.error(err); }
             
-            // รอ 1 วินาที ให้ชัวร์ว่า Database เซฟเสร็จ แล้วสั่งรีเฟรชหน้าเว็บ
             setTimeout(() => { window.saveMapStateAndReload(); }, 1000); 
         };
 
@@ -779,17 +818,75 @@
             } catch (err) { alert("Error: " + err.message); window.hideLoading(); event.target.value = ''; }
         };
 
-        window.addFieldRow = function(name = '', type = 'Text') {
+        // 🚀 อัปเดต ฟังก์ชันเพิ่มฟิลด์ (เพิ่ม Option เปลี่ยนประเภท และกล่องกรอก Dropdown) 🚀
+        window.addFieldRow = function(name = '', type = 'Text', options = []) {
             const c = document.getElementById('fields_container');
-            c.innerHTML += `<div class="flex gap-2 items-center bg-slate-50 p-2 rounded border border-slate-200"><input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input flex-1 border rounded px-2 py-1 text-xs outline-none focus:border-emerald-500"><select class="field-type-input border rounded px-2 py-1 text-xs bg-white focus:border-emerald-500"><option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option><option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option><option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option></select><button type="button" onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 px-1"><i class="fa-solid fa-trash pointer-events-none"></i></button></div>`;
+            const rowId = 'field_row_' + Math.random().toString(36).substr(2, 9);
+            const optionsStr = Array.isArray(options) ? options.join(', ') : '';
+            const hideOptions = type !== 'Dropdown' ? 'hidden' : '';
+            
+            c.innerHTML += `
+            <div id="${rowId}" class="flex flex-col gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div class="flex gap-2 items-center w-full">
+                    <input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name-input w-1/2 border rounded px-2 py-1.5 text-xs outline-none focus:border-emerald-500">
+                    <select class="field-type-input w-1/2 border rounded px-2 py-1.5 text-xs bg-white focus:border-emerald-500" onchange="toggleDropdownInput('${rowId}', this.value)">
+                        <option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option>
+                        <option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option>
+                        <option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option>
+                        <option value="Dropdown" ${type === 'Dropdown' ? 'selected' : ''}>ตัวเลือก (Dropdown) 🔽</option>
+                    </select>
+                    <button type="button" onclick="document.getElementById('${rowId}').remove()" class="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition"><i class="fa-solid fa-trash pointer-events-none"></i></button>
+                </div>
+                <div class="dropdown-options-input w-full ${hideOptions}">
+                    <input type="text" placeholder="พิมพ์ตัวเลือกคั่นด้วยลูกน้ำ เช่น LED, โซล่าเซลล์, ทั่วไป" value="${optionsStr}" class="w-full border border-emerald-300 bg-emerald-50/50 rounded px-2 py-1.5 text-xs outline-none focus:border-emerald-500">
+                </div>
+            </div>`;
+        };
+
+        // 🚀 สคริปต์สลับเปิดปิดกล่อง Dropdown 🚀
+        window.toggleDropdownInput = function(rowId, selectedType) {
+            const row = document.getElementById(rowId);
+            const optionsBox = row.querySelector('.dropdown-options-input');
+            if (selectedType === 'Dropdown') {
+                optionsBox.classList.remove('hidden');
+            } else {
+                optionsBox.classList.add('hidden');
+                optionsBox.querySelector('input').value = ''; // เคลียร์ค่าทิ้ง
+            }
         };
         
-        window.openAddLayerModal = function() { document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; document.getElementById('new_layer_name').value = ''; document.getElementById('edit_layer_name_old').value = ''; document.getElementById('fields_container').innerHTML = ''; window.addFieldRow('ชื่อ'); window.addFieldRow('รายละเอียด'); document.getElementById('btnDeleteLayer').classList.add('hidden'); window.toggleModal('layerModal'); };
-        window.openEditModal = function(name) { const l = appLayers.find(layer => layer.name === name); if(!l) { alert('ไม่พบข้อมูล'); return; } document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; document.getElementById('new_layer_name').value = l.name; document.getElementById('edit_layer_name_old').value = l.name; document.getElementById('new_layer_color').value = l.color; document.getElementById('new_layer_type').value = l.type; document.getElementById('fields_container').innerHTML = ''; l.fields.forEach(f => window.addFieldRow(f.name, f.type)); document.getElementById('btnDeleteLayer').classList.remove('hidden'); window.toggleModal('layerModal'); };
+        window.openAddLayerModal = function() { 
+            document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; 
+            document.getElementById('new_layer_name').value = ''; 
+            document.getElementById('edit_layer_name_old').value = ''; 
+            document.getElementById('fields_container').innerHTML = ''; 
+            window.addFieldRow('ชื่อ'); 
+            window.addFieldRow('รายละเอียด'); 
+            document.getElementById('btnDeleteLayer').classList.add('hidden'); 
+            window.toggleModal('layerModal'); 
+        };
+
+        window.openEditModal = function(name) { 
+            const l = appLayers.find(layer => layer.name === name); 
+            if(!l) { alert('ไม่พบข้อมูล'); return; } 
+            
+            document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; 
+            document.getElementById('new_layer_name').value = l.name; 
+            document.getElementById('edit_layer_name_old').value = l.name; 
+            document.getElementById('new_layer_color').value = l.color; 
+            document.getElementById('new_layer_type').value = l.type; 
+            
+            document.getElementById('fields_container').innerHTML = ''; 
+            // 🚀 เรียกใช้งาน addFieldRow โดยโยน options ไปด้วย 🚀
+            l.fields.forEach(f => window.addFieldRow(f.name, f.type, f.options)); 
+            
+            document.getElementById('btnDeleteLayer').classList.remove('hidden'); 
+            window.toggleModal('layerModal'); 
+        };
+
         window.deleteCurrentLayer = async function(name) { if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { window.showLoading('กำลังลบชั้นข้อมูล...'); await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); window.saveMapStateAndReload(); } };
         window.exportGeoJSON = function() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures })); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); };
         
-        // --- 10. สั่งเริ่มทำงาน ---
         window.fetchLayers();
     </script>
 </body>
