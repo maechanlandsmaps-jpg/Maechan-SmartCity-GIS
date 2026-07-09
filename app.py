@@ -81,22 +81,47 @@ def delete_layer(name):
 
 @app.route('/api/features', methods=['GET'])
 def get_features():
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("SELECT id, layer_name, properties, geojson FROM features")
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT id, layer_name, properties, geojson FROM features")
+        rows = c.fetchall()
+        c.close()
+        conn.close()
+    except Exception as e:
+        print("DB Fetch Error:", e)
+        return jsonify({"type": "FeatureCollection", "features": []})
+
     features = []
     for row in rows:
         try:
-            f = json.loads(row[3])
-            f['properties'] = json.loads(row[2]) if row[2] else {}
-            f['properties']['id'] = row[0]
-            f['properties']['layer_name'] = row[1]
-            features.append(f)
+            # ป้องกันกรณีข้อมูล GeoJSON (row[3]) หรือ Properties (row[2]) เป็น null หรือค่าว่าง
+            f_text = row[3]
+            p_text = row[2]
+            
+            f = json.loads(f_text) if f_text else {}
+            if f is None or not isinstance(f, dict):
+                f = {}
+                
+            props = json.loads(p_text) if p_text else {}
+            if props is None or not isinstance(props, dict):
+                props = {}
+                
+            props['id'] = row[0]
+            props['layer_name'] = row[1]
+            f['properties'] = props
+            
+            if 'type' not in f:
+                f['type'] = 'Feature'
+            
+            # กรองเอาเฉพาะข้อมูลที่มีพิกัด (geometry) เท่านั้น หากไม่มีพิกัดให้ข้ามไป เพื่อไม่ให้แผนที่พัง
+            if 'geometry' in f and f['geometry'] is not None:
+                features.append(f)
+                
         except Exception as e:
-            print("Error parsing feature:", e)
+            # ถ้ามีข้อมูลไหนโครงสร้างพังจริงๆ จะ Print ลง Log ไว้ แต่ไม่ทำให้ระบบโดยรวมล่ม
+            print(f"Error parsing feature ID {row[0]}:", e)
+            
     return jsonify({"type": "FeatureCollection", "features": features})
 
 @app.route('/api/features', methods=['POST'])
