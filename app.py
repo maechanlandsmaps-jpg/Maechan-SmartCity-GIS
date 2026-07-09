@@ -1,74 +1,148 @@
 from flask import Flask, render_template, request, jsonify
+import psycopg2
+from psycopg2 import errors
+import json
 import os
-from datetime import datetime
 
 app = Flask(__name__)
 
-# หน้าหลักระบบแผนที่ Maechan GIS
+# เชื่อมต่อ Supabase
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db_connection():
+    # ใช้ connect_timeout=5 เพื่อป้องกันเซิร์ฟเวอร์ค้าง
+    return psycopg2.connect(DATABASE_URL, sslmode='require', connect_timeout=5)
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# API รองรับการรับข้อมูล Features (POST /api/features) ที่พังบ่อยๆ
-@app.route('/api/features', methods=['POST'])
-def save_features():
+@app.route('/api/layers', methods=['GET'])
+def get_layers():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, name, color, type, fields FROM layers")
+    rows = c.fetchall()
+    c.close()
+    conn.close()
+    return jsonify([{"id": r[0], "name": r[1], "color": r[2], "type": r[3], "fields": json.loads(r[4] if r[4] else '[]')} for r in rows])
+
+@app.route('/api/layers', methods=['POST'])
+def add_layer():
+    data = request.json
+    conn = get_db_connection()
+    c = conn.cursor()
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"status": "error", "message": "ไม่พบข้อมูลที่ส่งมาจากหน้าเว็บ"}), 400
-
-        # ตรวจสอบโครงสร้างหลักของ GeoJSON
-        features = data.get('features', [])
-        if not isinstance(features, list):
-            return jsonify({"status": "error", "message": "รูปแบบโครงสร้าง GeoJSON ไม่ถูกต้อง"}), 400
-
-        cleaned_features = []
+        # 🚀 แก้ไขสำคัญ: รับค่า fields ทั้งก้อน (รวม options ของ Dropdown ด้วย) ไม่ตัดทิ้งแล้ว! 🚀
+        fields_str = json.dumps(data.get('fields', []))
         
-        for feature in features:
-            # แก้ไขบั๊กหลัก: ตรวจสอบและตัดฟีเจอร์ที่เป็นค่าว่าง (Null Check) ทิ้งไป
-            if feature is None:
-                print("⚠️ พบฟีเจอร์ที่มีค่าเป็น None: ระบบทำการข้ามเพื่อป้องกัน Error")
-                continue
-                
-            if not isinstance(feature, dict) or 'geometry' not in feature:
-                continue
-
-            # แก้ไขบั๊ก: 'NoneType' object does not support item assignment 
-            # ป้องกันกรณีตัวฟีเจอร์มีพิกัด แต่แถวข้อมูลอาร์เรย์ properties ข้างในหลุดมาเป็น null/None
-            if feature.get('properties') is None:
-                feature['properties'] = {}
-
-            try:
-                # ตัวอย่างจุดที่โค้ดเดิมเคยพยายามเขียนทับลง properties แล้วพัง
-                # สามารถเปลี่ยนฟิลด์เหล่านี้ให้ตรงกับตาราง Supabase ของคุณได้เลยครับ
-                feature['properties']['created_at'] = datetime.utcnow().isoformat()
-                
-                # หากผ่านด่านตรวจสอบความสะอาดเรียบร้อย ให้เก็บลงลิสต์
-                cleaned_features.append(feature)
-                
-            except TypeError as te:
-                print(f"❌ Error กำหนดค่า Properties ตกหล่น: {te}")
-                continue
-
-        # ========================================================
-        # 🔗 ส่วนสำหรับเชื่อมต่อกับฐานข้อมูล Supabase เดิมของคุณ 
-        # (สามารถใส่คำสั่งหรืองัดฟังก์ชัน insert ของคุณมาวางครอบตรงนี้ได้เลย)
-        # ตัวอย่าง: supabase.table('your_table').insert(cleaned_features).execute()
-        # ========================================================
+        old_name = data.get('old_name')
+        new_name = data['name']
         
-        print(f"✅ ประมวลผลเสร็จสิ้น: ล้างข้อมูลเสียออกแล้ว เหลือข้อมูลที่สมบูรณ์ {len(cleaned_features)} แถว")
-
-        return jsonify({
-            "status": "success", 
-            "message": "บันทึกข้อมูลและกรองส่วนที่เสียหายเรียบร้อยแล้ว", 
-            "count": len(cleaned_features)
-        }), 200
-
+        # 🚀 อัปเกรด: ถ้าระบุ old_name แปลว่าเป็นการกดปุ่ม "แก้ไข" ชั้นข้อมูลเดิม
+        if old_name and old_name != new_name:
+            c.execute("UPDATE layers SET name=%s, color=%s, type=%s, fields=%s WHERE name=%s",
+                      (new_name, data['color'], data['type'], fields_str, old_name))
+            # อัปเดตตาราง features ให้ชื่อชั้นข้อมูลตรงกันด้วย
+            c.execute("UPDATE features SET layer_name=%s WHERE layer_name=%s", (new_name, old_name))
+        else:
+            # 🚀 ถ้าชื่อเดิม หรือสร้างใหม่ ให้ใช้ ON CONFLICT เพื่ออัปเดตข้อมูลทับของเดิม (UPSERT)
+            c.execute("""
+                INSERT INTO layers (name, color, type, fields) 
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (name) DO UPDATE 
+                SET color = EXCLUDED.color, type = EXCLUDED.type, fields = EXCLUDED.fields
+            """, (new_name, data['color'], data['type'], fields_str))
+        
+        conn.commit()
+        return jsonify({"status": "success"})
     except Exception as e:
-        print(f"💥 Server Critical Error: {str(e)}")
-        return jsonify({"status": "error", "message": f"เกิดข้อผิดพลาดภายในระบบ: {str(e)}"}), 500
+        conn.rollback()
+        print("Layer Save Error:", e)
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        c.close()
+        conn.close()
+
+@app.route('/api/layers/<name>', methods=['DELETE'])
+def delete_layer(name):
+    conn = None
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("DELETE FROM features WHERE layer_name = %s", (name,))
+        c.execute("DELETE FROM layers WHERE name = %s", (name,))
+        conn.commit()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/features', methods=['GET'])
+def get_features():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, layer_name, properties, geojson FROM features")
+    rows = c.fetchall()
+    c.close()
+    conn.close()
+    features = []
+    for row in rows:
+        try:
+            f = json.loads(row[3])
+            f['properties'] = json.loads(row[2]) if row[2] else {}
+            f['properties']['id'] = row[0]
+            f['properties']['layer_name'] = row[1]
+            features.append(f)
+        except Exception as e:
+            print("Error parsing feature:", e)
+    return jsonify({"type": "FeatureCollection", "features": features})
+
+@app.route('/api/features', methods=['POST'])
+def save_feature():
+    data = request.json
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (%s, %s, %s)", 
+              (data.get('layer_name'), json.dumps(data.get('properties', {})), json.dumps(data.get('geojson'))))
+    conn.commit()
+    c.close()
+    conn.close()
+    return jsonify({"status": "success"})
+
+@app.route('/api/features/<int:id>', methods=['PUT'])
+def update_feature(id):
+    data = request.json
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        if 'geojson' in data and data['geojson'] is not None:
+            c.execute("UPDATE features SET properties = %s, geojson = %s WHERE id = %s", 
+                      (json.dumps(data.get('properties', {})), json.dumps(data.get('geojson')), id))
+        else:
+            c.execute("UPDATE features SET properties = %s WHERE id = %s", 
+                      (json.dumps(data.get('properties', {})), id))
+        conn.commit()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        c.close()
+        conn.close()
+
+@app.route('/api/features/<int:id>', methods=['DELETE'])
+def delete_feature(id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM features WHERE id = %s", (id,))
+    conn.commit()
+    c.close()
+    conn.close()
+    return jsonify({"status": "success"})
 
 if __name__ == '__main__':
-    # รันพอร์ตตาม Environment ของ Render 
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port)
