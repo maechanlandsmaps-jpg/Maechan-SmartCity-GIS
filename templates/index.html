@@ -15,6 +15,7 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.14.2/dist/leaflet-geoman.min.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -22,185 +23,192 @@
 
     <style>
         body { font-family: 'Prompt', sans-serif; overflow: hidden; }
-        #map { height: 100vh; width: 100%; z-index: 10; transition: height 0.3s ease; }
+        #map { height: 100vh; width: 100%; z-index: 10; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .leaflet-popup-content { font-family: 'Prompt', sans-serif; margin: 12px 14px; min-width: 240px !important; }
+        .leaflet-popup-content { font-family: 'Prompt', sans-serif; min-width: 250px !important; }
     </style>
 </head>
-<body class="bg-slate-900 text-white flex h-screen w-screen m-0 p-0">
+<body class="bg-[#0f172a] text-slate-100 flex h-screen w-screen m-0 p-0 select-none">
 
-    <div class="w-80 bg-slate-800 flex flex-col justify-between border-r border-slate-700 z-20 shadow-xl">
+    <div class="w-80 bg-[#1e293b] flex flex-col justify-between border-r border-slate-700/60 z-20 shadow-2xl">
         <div class="p-4 flex flex-col flex-1 overflow-y-auto hide-scrollbar">
+            
             <div class="flex items-center space-x-3 mb-6">
-                <div class="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
+                <div class="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
                     <i class="fa-solid fa-map-location-dot text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="text-lg font-semibold tracking-wide text-emerald-400">Maechan GIS</h1>
-                    <p class="text-xs text-slate-400">SMART CITY DATA PLATFORM</p>
+                    <h1 class="text-base font-semibold tracking-wide text-emerald-400">Maechan GIS</h1>
+                    <p class="text-[10px] text-slate-400 font-medium tracking-wider">SMART CITY DATA PLATFORM</p>
                 </div>
             </div>
 
             <div class="flex items-center justify-between mb-4">
-                <span class="text-sm font-medium tracking-wider text-slate-300">ชั้นข้อมูล (LAYERS)</span>
+                <span class="text-xs font-semibold tracking-wider text-slate-400">ชั้นข้อมูล (LAYERS)</span>
                 <input type="file" id="shpFileInput" accept=".zip" class="hidden" onchange="handleShpUpload(event)">
-                <button onclick="triggerFileInput()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1 font-medium transition shadow-md shadow-emerald-900/20">
-                    <i class="fa-solid fa-plus text-xs"></i> <span>เพิ่ม</span>
+                <button onclick="triggerFileInput()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1.5 font-medium transition-all shadow-md shadow-emerald-900/30">
+                    <i class="fa-solid fa-plus text-[10px]"></i> <span>เพิ่ม</span>
                 </button>
             </div>
 
-            <div class="space-y-3" id="layerContainer">
-                <div class="bg-slate-700/50 p-3 rounded-xl border border-slate-600/50 flex items-center justify-between">
+            <div class="space-y-2.5 flex-1" id="layerContainer">
+                <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/40 flex items-center justify-between shadow-sm">
                     <div class="flex items-center space-x-3">
-                        <input type="checkbox" checked class="w-4 h-4 text-emerald-500 rounded bg-slate-800 border-slate-600 focus:ring-emerald-500">
-                        <span class="text-sm text-slate-200">ผังเมืองแม่จัน</span>
+                        <input type="checkbox" checked class="w-4 h-4 text-emerald-500 rounded bg-slate-900 border-slate-600 focus:ring-emerald-500">
+                        <span class="text-xs font-medium text-slate-200">ระบบแสดงตำแหน่งไฟฟ้า</span>
                     </div>
                     <div class="flex space-x-2 text-slate-400 text-xs">
-                        <button class="hover:text-white"><i class="fa-solid fa-eye"></i></button>
-                        <button class="hover:text-white"><i class="fa-solid fa-gear"></i></button>
+                        <button class="hover:text-white transition"><i class="fa-solid fa-eye"></i></button>
+                        <button class="hover:text-white transition"><i class="fa-solid fa-table"></i></button>
+                        <button class="hover:text-white transition"><i class="fa-solid fa-gear"></i></button>
+                        <button class="hover:text-rose-400 transition"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="p-4 border-t border-slate-700 text-center text-xs text-slate-500 font-light bg-slate-850">
-            Designed by Kru Best &copy; 2026
+        <div class="p-4 border-t border-slate-700/60 bg-slate-900/40 space-y-2">
+            <button class="w-full bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs py-2 rounded-lg font-medium transition border border-slate-700/50 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-download"></i> <span>ส่งออกข้อมูลทั้งหมด</span>
+            </button>
+            <div class="grid grid-cols-2 gap-2">
+                <button class="bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] py-1.5 rounded-md transition border border-slate-700/40 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-file-code text-emerald-500"></i> <span>JSON</span>
+                </button>
+                <button class="bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] py-1.5 rounded-md transition border border-slate-700/40 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-file-zipper text-amber-500"></i> <span>SHP (zip)</span>
+                </button>
+            </div>
         </div>
     </div>
 
     <div class="flex-1 relative">
         <div id="map"></div>
         
-        <div id="loadingOverlay" class="hidden absolute inset-0 bg-slate-900/80 z-[1000] flex flex-col items-center justify-content justify-center space-y-4">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
-            <p class="text-sm text-slate-300 font-medium">กำลังนำเข้าข้อมูล...</p>
+        <div id="loadingOverlay" class="hidden absolute inset-0 bg-slate-950/80 z-[9999] flex flex-col items-center justify-center space-y-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-slate-800 border-t-emerald-500"></div>
+            <p id="loadingText" class="text-xs text-slate-300 font-medium tracking-wider">กำลังนำเข้าข้อมูล...</p>
         </div>
     </div>
 
     <script>
-        // 1. Initialize Leaflet Map (พิกัดเริ่มต้น อำเภอแม่จัน เชียงราย)
-        const map = L.map('map').setView([20.1472, 99.8532], 14);
+        // 1. ตั้งค่าเริ่มต้นแผนที่ Leaflet (พิกัด อ.แม่จัน จ.เชียงราย)
+        const map = L.map('map', { zoomControl: false }).setView([20.1472, 99.8532], 14);
         
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
+            attribution: '&copy; OpenStreetMap'
         }).addTo(map);
+        L.control.zoom({ position: 'topleft' }).addTo(map);
 
-        // ฟังก์ชันเปิดเลือกไฟล์
         function triggerFileInput() {
             document.getElementById('shpFileInput').click();
         }
 
-        // 2. ฟังก์ชันจัดการไฟล์และแก้ไขบักดักจับ Null / Empty Type ตัวปัญหา
+        // 2. ฟังก์ชันแก้ไขบั๊กการอัปโหลดไฟล์เพื่อไม่ให้ค้างคาจอโหลด
         async function handleShpUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            const loading = document.getElementById('loadingOverlay');
-            loading.classList.remove('hidden');
+            // เปิดแสดงตัวโหลดสถานะหน้าจอ
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) loadingOverlay.classList.remove('hidden');
 
             try {
-                const reader = new FileReader();
-                reader.onload = async function (e) {
-                    try {
-                        const buffer = e.target.result;
-                        // แปลง Shapefile Zip เป็น GeoJSON โดยพึ่งพา shpjs
-                        const geojson = await shp(buffer);
-                        
-                        let rawFeatures = [];
-                        if (Array.isArray(geojson)) {
-                            geojson.forEach(layer => { if (layer && layer.features) rawFeatures.push(...layer.features); });
-                        } else if (geojson && geojson.features) {
-                            rawFeatures = geojson.features;
-                        }
+                const buffer = await file.arrayBuffer();
+                // นำเข้าโมดูล shpjs แปลงไฟล์ zip
+                const geojson = await shp(buffer);
+                
+                let extractedFeatures = [];
+                if (Array.isArray(geojson)) {
+                    geojson.forEach(layer => { 
+                        if (layer && layer.features) extractedFeatures.push(...layer.features); 
+                    });
+                } else if (geojson && geojson.features) {
+                    extractedFeatures = geojson.features;
+                }
 
-                        // ==========================================
-                        // แก้ไขจุดเกิดเหตุหลัก: ล้างข้อมูลเสียฝั่ง Frontendก่อนส่ง
-                        // ==========================================
-                        const cleanFeatures = rawFeatures.filter(feature => {
-                            return (
-                                feature !== null && 
-                                typeof feature === 'object' &&
-                                feature.type !== undefined && // ป้องกันการอ่าน 'type' ของ null
-                                feature.type === 'Feature' &&
-                                feature.geometry !== null &&
-                                feature.geometry.type !== undefined
-                            );
-                        }).map(feature => {
-                            // ป้องกันกรณีที่ Properties ด้านในหลุดค่าว่างเปล่า (None)
-                            if (!feature.properties || feature.properties === null) {
-                                feature.properties = {};
-                            }
-                            return feature;
-                        });
+                // ==========================================
+                // ✨ FIX จุดพังหลัก: กรองล้างข้อมูลพิกัดที่หลุดค่า Null บนหน้าเว็บ ทันที!
+                // ==========================================
+                const secureFeatures = extractedFeatures.filter(f => {
+                    return (
+                        f !== null && 
+                        typeof f === 'object' &&
+                        f.type !== undefined && // บล็อก Error: Cannot read properties of null (reading 'type')
+                        f.type === 'Feature' &&
+                        f.geometry !== null &&
+                        f.geometry.type !== undefined
+                    );
+                }).map(f => {
+                    // หากฟีเจอร์ไม่มีตาราง Properties ด้านใน ให้ยัด Object ว่างกันระเบิด
+                    if (!f.properties || f.properties === null) {
+                        f.properties = {};
+                    }
+                    return f;
+                });
 
-                        // หากไม่มีข้อมูลฟีเจอร์ใช้งานได้เลย ให้แจ้งเตือนตัดจบการทำงาน
-                        if (cleanFeatures.length === 0) {
-                            throw new Error("โครงสร้างภายในไฟล์เสียหาย หรือไม่มีพิกัดรูปทรง (Geometry Null)");
-                        }
+                if (secureFeatures.length === 0) {
+                    throw new Error("โครงสร้างเลเยอร์ภายในไฟล์เสีย หรือไม่มีค่ารูปทรงพิกัดที่อ่านได้");
+                }
 
-                        // ประกอบกลับร่างเป็น GeoJSON FeatureCollection สมบูรณ์
-                        const cleanGeoJSON = {
-                            type: "FeatureCollection",
-                            features: cleanFeatures
-                        };
+                const buildGeoJSON = {
+                    type: "FeatureCollection",
+                    features: secureFeatures
+                };
 
-                        // 3. ยิงข้อมูลไปหาหลังบ้านเพื่อบันทึก
-                        sendDataToBackend(cleanGeoJSON);
+                // ส่งค่าขึ้นเซิร์ฟเวอร์หลังบ้าน
+                await sendToServer(buildGeoJSON);
 
-                        // 4. Render แสดงผลบนแผ่นที่ Leaflet ทันที
-                        L.geoJSON(cleanGeoJSON, {
-                            style: function (feature) {
-                                return { color: "#10b981", weight: 3, opacity: 0.8 };
-                            },
-                            onEachFeature: function (feature, layer) {
-                                if (feature.properties) {
-                                    let popupContent = "<div class='text-slate-800 font-medium mb-1 border-b pb-1 text-sm text-emerald-600'>รายละเอียดข้อมูล</div><table class='w-full text-xs text-left text-slate-600'>";
-                                    for (let key in feature.properties) {
-                                        if(typeof feature.properties[key] !== 'object'){
-                                            popupContent += `<tr><td class='font-semibold py-0.5 pr-2'>${key}:</td><td>${feature.properties[key]}</td></tr>`;
-                                        }
-                                    }
-                                    popupContent += "</table>";
-                                    layer.bindPopup(popupContent);
+                // พล็อตข้อมูลสะอาดลงบนแผนที่ Leaflet ทันที
+                L.geoJSON(buildGeoJSON, {
+                    style: { color: "#10b981", weight: 3, opacity: 0.85 },
+                    onEachFeature: function (feature, layer) {
+                        if (feature.properties) {
+                            let popupHtml = "<div class='text-slate-800 font-semibold mb-1.5 border-b pb-1 text-xs text-emerald-600'><i class='fa-solid fa-location-dot mr-1'></i> ข้อมูลฟีเจอร์</div><table class='w-full text-[11px] text-slate-600'>";
+                            for (let k in feature.properties) {
+                                if (typeof feature.properties[k] !== 'object') {
+                                    popupHtml += `<tr><td class='font-medium py-0.5 pr-2 text-slate-500'>${k}:</td><td class='text-slate-800'>${feature.properties[k]}</td></tr>`;
                                 }
                             }
-                        }).addTo(map);
-
-                    } catch (err) {
-                        alert("เกิดข้อผิดพลาดในการประมวลผลไฟล์: " + err.message);
-                    } finally {
-                        loading.classList.add('hidden');
-                        document.getElementById('shpFileInput').value = ''; // ล้างค่าสเตตัสเก่า
+                            popupHtml += "</table>";
+                            layer.bindPopup(popupHtml);
+                        }
                     }
-                };
-                
-                reader.readAsArrayBuffer(file);
+                }).addTo(map);
 
-            } catch (globalError) {
-                alert("ล้มเหลว: " + globalError.message);
-                loading.classList.add('hidden');
+            } catch (err) {
+                console.error("Frontend Exception Details:", err);
+                alert("การนำเข้าไฟล์ล้มเหลว: " + err.message);
+            } finally {
+                // 🔒 บังคับปิดไอคอนโหลดหมุนๆ ทุกกรณี ไม่ว่าจะพังหรือสำเร็จผ่านบล็อก finally
+                if (loadingOverlay) loadingOverlay.classList.add('hidden');
+                document.getElementById('shpFileInput').value = ''; 
             }
         }
 
-        // 4. ส่งข้อมูลชุดที่คลีนแล้วเข้า Route API ของ Flask
-        function sendDataToBackend(geoJsonData) {
-            fetch('/api/features', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(geoJsonData)
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    console.log("บันทึกข้อมูลเรียบร้อยแล้ว: " + data.count + " ฟีเจอร์");
-                } else {
-                    alert("เซิร์ฟเวอร์ปฏิเสธการบันทึก: " + data.message);
+        // 3. ฟังก์ชันการคุยกับ Flask Route หลังบ้าน
+        async function sendToServer(cleanGeoData) {
+            try {
+                const response = await fetch('/api/features', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cleanGeoData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned HTTP HTTP ${response.status}`);
                 }
-            })
-            .catch(error => {
-                console.error("Error network:", error);
-                alert("ไม่สามารถติดต่อเซิร์ฟเวอร์หลังบ้านได้");
-            });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    console.log(`🎉 บันทึกข้อมูลสำเร็จทั้งหมด: ${result.count} รายการ`);
+                } else {
+                    alert("เซิร์ฟเวอร์ปฏิเสธข้อมูล: " + result.message);
+                }
+            } catch (netErr) {
+                console.error("Network upload error:", netErr);
+                alert("ไม่สามารถอัปเดตข้อมูลลงฐานข้อมูลหลังบ้านได้: " + netErr.message);
+            }
         }
     </script>
 </body>
