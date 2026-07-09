@@ -19,17 +19,13 @@ def index():
 
 @app.route('/api/layers', methods=['GET'])
 def get_layers():
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("SELECT id, name, color, type, fields FROM layers")
-        rows = c.fetchall()
-        c.close()
-        conn.close()
-        return jsonify([{"id": r[0], "name": r[1], "color": r[2], "type": r[3], "fields": json.loads(r[4] if r[4] else '[]')} for r in rows])
-    except Exception as e:
-        print("Get Layers Error:", e)
-        return jsonify([])
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, name, color, type, fields FROM layers")
+    rows = c.fetchall()
+    c.close()
+    conn.close()
+    return jsonify([{"id": r[0], "name": r[1], "color": r[2], "type": r[3], "fields": json.loads(r[4] if r[4] else '[]')} for r in rows])
 
 @app.route('/api/layers', methods=['POST'])
 def add_layer():
@@ -37,15 +33,20 @@ def add_layer():
     conn = get_db_connection()
     c = conn.cursor()
     try:
+        # 🚀 แก้ไขสำคัญ: รับค่า fields ทั้งก้อน (รวม options ของ Dropdown ด้วย) ไม่ตัดทิ้งแล้ว! 🚀
         fields_str = json.dumps(data.get('fields', []))
+        
         old_name = data.get('old_name')
         new_name = data['name']
         
+        # 🚀 อัปเกรด: ถ้าระบุ old_name แปลว่าเป็นการกดปุ่ม "แก้ไข" ชั้นข้อมูลเดิม
         if old_name and old_name != new_name:
             c.execute("UPDATE layers SET name=%s, color=%s, type=%s, fields=%s WHERE name=%s",
                       (new_name, data['color'], data['type'], fields_str, old_name))
+            # อัปเดตตาราง features ให้ชื่อชั้นข้อมูลตรงกันด้วย
             c.execute("UPDATE features SET layer_name=%s WHERE layer_name=%s", (new_name, old_name))
         else:
+            # 🚀 ถ้าชื่อเดิม หรือสร้างใหม่ ให้ใช้ ON CONFLICT เพื่ออัปเดตข้อมูลทับของเดิม (UPSERT)
             c.execute("""
                 INSERT INTO layers (name, color, type, fields) 
                 VALUES (%s, %s, %s, %s)
@@ -81,64 +82,35 @@ def delete_layer(name):
 
 @app.route('/api/features', methods=['GET'])
 def get_features():
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("SELECT id, layer_name, properties, geojson FROM features")
-        rows = c.fetchall()
-        c.close()
-        conn.close()
-    except Exception as e:
-        print("DB Fetch Error:", e)
-        return jsonify({"type": "FeatureCollection", "features": []})
-
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, layer_name, properties, geojson FROM features")
+    rows = c.fetchall()
+    c.close()
+    conn.close()
     features = []
     for row in rows:
         try:
-            # ป้องกันกรณีข้อมูล GeoJSON (row[3]) หรือ Properties (row[2]) เป็น null หรือค่าว่าง
-            f_text = row[3]
-            p_text = row[2]
-            
-            f = json.loads(f_text) if f_text else {}
-            if f is None or not isinstance(f, dict):
-                f = {}
-                
-            props = json.loads(p_text) if p_text else {}
-            if props is None or not isinstance(props, dict):
-                props = {}
-                
-            props['id'] = row[0]
-            props['layer_name'] = row[1]
-            f['properties'] = props
-            
-            if 'type' not in f:
-                f['type'] = 'Feature'
-            
-            # กรองเอาเฉพาะข้อมูลที่มีพิกัด (geometry) เท่านั้น หากไม่มีพิกัดให้ข้ามไป เพื่อไม่ให้แผนที่พัง
-            if 'geometry' in f and f['geometry'] is not None:
-                features.append(f)
-                
+            f = json.loads(row[3])
+            f['properties'] = json.loads(row[2]) if row[2] else {}
+            f['properties']['id'] = row[0]
+            f['properties']['layer_name'] = row[1]
+            features.append(f)
         except Exception as e:
-            # ถ้ามีข้อมูลไหนโครงสร้างพังจริงๆ จะ Print ลง Log ไว้ แต่ไม่ทำให้ระบบโดยรวมล่ม
-            print(f"Error parsing feature ID {row[0]}:", e)
-            
+            print("Error parsing feature:", e)
     return jsonify({"type": "FeatureCollection", "features": features})
 
 @app.route('/api/features', methods=['POST'])
 def save_feature():
     data = request.json
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (%s, %s, %s)", 
-                  (data.get('layer_name'), json.dumps(data.get('properties', {})), json.dumps(data.get('geojson'))))
-        conn.commit()
-        c.close()
-        conn.close()
-        return jsonify({"status": "success"})
-    except Exception as e:
-        print("Save Feature Error:", e)
-        return jsonify({"status": "error", "message": str(e)})
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO features (layer_name, properties, geojson) VALUES (%s, %s, %s)", 
+              (data.get('layer_name'), json.dumps(data.get('properties', {})), json.dumps(data.get('geojson'))))
+    conn.commit()
+    c.close()
+    conn.close()
+    return jsonify({"status": "success"})
 
 @app.route('/api/features/<int:id>', methods=['PUT'])
 def update_feature(id):
