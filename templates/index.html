@@ -6,7 +6,7 @@
     <title>Smart City GIS | เทศบาลตำบลแม่จัน</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -15,9 +15,7 @@
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.14.2/dist/leaflet-geoman.min.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
@@ -26,1016 +24,184 @@
         body { font-family: 'Prompt', sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100%; z-index: 10; transition: height 0.3s ease; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        
         .leaflet-popup-content { font-family: 'Prompt', sans-serif; margin: 12px 14px; min-width: 240px !important; }
-        
-        .layer-selector:checked + div { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
-        
-        #attribute-panel { height: 0; transition: height 0.3s ease; overflow: hidden; display: flex; flex-direction: column; }
-        #attribute-panel.open { height: 45vh; border-top: 4px solid #1e293b; } 
-        .table-container { flex: 1; overflow: auto; }
-        table { width: 100%; border-collapse: collapse; }
-        th { position: sticky; top: 0; background: #f8fafc; z-index: 1; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-        td { white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
-
-        .custom-map-label {
-            background: rgba(255, 255, 255, 0.95); border: 1px solid #cbd5e1; border-radius: 6px;
-            padding: 2px 8px; font-size: 11px; font-family: 'Prompt', sans-serif; font-weight: 700;
-            color: #0f172a; box-shadow: 0 2px 4px rgba(0,0,0,0.1); white-space: nowrap; pointer-events: none;
-        }
-        .leaflet-tooltip-left.custom-map-label::before { border-left-color: rgba(255,255,255,0.95); }
-        .leaflet-tooltip-right.custom-map-label::before { border-right-color: rgba(255,255,255,0.95); }
-        
-        .custom-pin-marker { background: transparent !important; border: none !important; }
     </style>
 </head>
-<body class="flex h-screen bg-slate-100 relative">
+<body class="bg-slate-900 text-white flex h-screen w-screen m-0 p-0">
 
-    <div id="mobile-overlay" onclick="window.toggleSidebar()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] hidden md:hidden opacity-0 transition-opacity duration-300"></div>
-
-    <aside id="sidebar" class="w-80 bg-slate-900 text-white flex flex-col shadow-2xl z-[60] fixed md:relative h-full shrink-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300">
-        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
-            <div>
-                <h1 class="text-xl font-bold text-emerald-400 flex items-center gap-3">
-                    <i class="fa-solid fa-map-location-dot"></i> Maechan GIS
-                </h1>
-                <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-widest">Smart City Data Platform</p>
-            </div>
-            <button onclick="window.toggleSidebar()" class="md:hidden text-slate-400 hover:text-white p-1">
-                <i class="fa-solid fa-xmark text-xl"></i>
-            </button>
-        </div>
-        
-        <div class="flex-1 p-4 flex flex-col overflow-hidden">
-            <div class="flex flex-col gap-3 mb-4">
-                <div class="flex justify-between items-center mb-1">
-                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider">ชั้นข้อมูล (Layers)</h2>
-                    <button onclick="window.openAddLayerModal()" class="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-md transition font-bold shadow-md">
-                        <i class="fa-solid fa-plus"></i> เพิ่ม
-                    </button>
+    <div class="w-80 bg-slate-800 flex flex-col justify-between border-r border-slate-700 z-20 shadow-xl">
+        <div class="p-4 flex flex-col flex-1 overflow-y-auto hide-scrollbar">
+            <div class="flex items-center space-x-3 mb-6">
+                <div class="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
+                    <i class="fa-solid fa-map-location-dot text-2xl"></i>
                 </div>
-                <div class="flex gap-1 justify-between items-center">
-                    <select id="bufferRadiusSelect" class="text-[10px] bg-slate-800 text-white border border-slate-700 rounded px-1 py-2 outline-none focus:border-purple-500 w-16 text-center">
-                        <option value="50">50m</option><option value="100">100m</option><option value="200">200m</option><option value="500">500m</option>
-                    </select>
-                    <button onclick="window.drawCombinedAnalysis()" class="flex-1 text-[10px] bg-purple-500 hover:bg-purple-600 text-white px-1 py-2 rounded transition font-bold shadow-md">
-                        <i class="fa-solid fa-bullseye"></i> วิเคราะห์รัศมี
-                    </button>
-                    <button onclick="window.clearBufferArea()" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-2 rounded transition font-bold">
-                        <i class="fa-solid fa-eraser"></i> ล้าง
-                    </button>
-                </div>
-            </div>
-            
-            <div class="space-y-3 overflow-y-auto flex-1 hide-scrollbar" id="layer-container">
-                <div class="text-center text-slate-500 text-sm mt-10"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูล...</div>
-            </div>
-        </div>
-
-        <div class="p-4 border-t border-slate-800 bg-slate-800/50">
-            <button onclick="window.exportGeoJSON()" class="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm mb-2"><i class="fa-solid fa-download mr-1"></i> ส่งออกข้อมูลทั้งหมด</button>
-            <div class="flex gap-2">
-                <button onclick="document.getElementById('importFile').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-upload mr-1"></i> JSON</button>
-                <button onclick="document.getElementById('importShp').click()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold py-3 rounded-lg transition border border-slate-700 shadow-sm"><i class="fa-solid fa-file-zipper mr-1"></i> SHP (.zip)</button>
-                <input type="file" id="importFile" accept=".geojson,.json" class="hidden" onchange="window.importFileHandler(event)">
-                <input type="file" id="importShp" accept=".zip" class="hidden" onchange="window.importShpHandler(event)">
-            </div>
-        </div>
-    </aside>
-
-    <main class="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
-        <button onclick="window.toggleSidebar()" class="md:hidden absolute top-4 right-4 z-[40] bg-white text-slate-800 w-10 h-10 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition">
-            <i class="fa-solid fa-bars text-lg"></i>
-        </button>
-
-        <button onclick="window.manualRefresh()" class="absolute top-20 right-4 z-[40] bg-white text-blue-600 w-10 h-10 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center hover:bg-blue-50 transition" title="รีเฟรชแผนที่ (Sync ข้อมูลล่าสุด)">
-            <i class="fa-solid fa-rotate-right text-lg"></i>
-        </button>
-
-        <div id="active-layer-badge" class="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-full shadow-2xl text-[10px] md:text-xs font-bold flex items-center gap-2 border border-slate-700 pointer-events-none transition-opacity duration-300 opacity-0">
-            <span id="badge-color" class="w-3 h-3 rounded-full shadow-sm border border-white/20 block"></span>
-            <span class="opacity-80">กำลังเลือก:</span>
-            <span id="badge-name" class="tracking-wide"></span>
-        </div>
-
-        <div id="map-legend" class="absolute bottom-8 left-4 z-[999] bg-white/95 backdrop-blur p-4 rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.1)] border border-slate-200 text-xs font-bold text-slate-700 hidden max-w-[200px]">
-            <h4 class="mb-3 text-slate-500 text-[10px] uppercase tracking-wider border-b border-slate-200 pb-2"><i class="fa-solid fa-list-ul mr-1"></i> คำอธิบายสัญลักษณ์</h4>
-            <div id="legend-items" class="space-y-2 max-h-48 overflow-y-auto hide-scrollbar"></div>
-        </div>
-
-        <div id="map"></div>
-
-        <div id="attribute-panel" class="bg-white z-30 shadow-2xl flex flex-col">
-            <div class="p-3 flex justify-between items-center border-b bg-slate-50 shrink-0">
-                <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm max-w-[50%] truncate"><i class="fa-solid fa-table text-blue-500"></i> <span id="current-table-layer" class="text-blue-600 truncate">-</span></h3>
-                <div class="flex items-center gap-3">
-                    <div class="relative hidden sm:block">
-                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
-                        <input type="text" id="table-search" placeholder="ค้นหา..." class="text-xs border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-blue-500 w-40 bg-white" onkeyup="window.filterTable()">
-                    </div>
-                    <button onclick="window.closeTable()" class="text-slate-400 hover:text-red-500 transition p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
-                </div>
-            </div>
-            <div class="table-container p-0">
-                <table id="attribute-table" class="text-xs md:text-sm text-left w-full">
-                    <thead id="table-head"></thead>
-                    <tbody id="table-body"></tbody>
-                </table>
-            </div>
-        </div>
-    </main>
-
-    <div id="layerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-5 border-b pb-3">
-                <h2 class="text-lg font-bold text-slate-800" id="modalTitle">สร้างชั้นข้อมูลใหม่</h2>
-                <button type="button" onclick="window.toggleModal('layerModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <form onsubmit="window.saveLayer(event)" class="space-y-4">
-                <input type="hidden" id="edit_layer_name_old">
-                <div><label class="block text-xs font-bold text-slate-600 mb-1">ชื่อชั้นข้อมูล</label><input type="text" id="new_layer_name" required class="w-full border rounded-lg p-2.5 text-sm outline-none focus:border-emerald-500"></div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-slate-600 mb-1">สีสัญลักษณ์</label><input type="color" id="new_layer_color" value="#10b981" class="w-full h-10 rounded-lg cursor-pointer border-0 p-0"></div>
-                    <div><label class="block text-xs font-bold text-slate-600 mb-1">ประเภท</label><select id="new_layer_type" class="w-full border rounded-lg p-2.5 text-sm bg-white"><option value="Point">จุด (Marker)</option><option value="Line">เส้น / รูปปิด</option></select></div>
-                </div>
-                <div class="pt-4 border-t border-slate-100">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block text-xs font-bold text-slate-600">ฟิลด์ข้อมูลเพิ่มเติม (Attributes)</label>
-                        <button type="button" onclick="window.addFieldRow()" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold"><i class="fa-solid fa-plus"></i> เพิ่มฟิลด์</button>
-                    </div>
-                    <div id="fields_container" class="space-y-2"></div>
-                </div>
-                <div class="flex flex-col gap-2 pt-4 border-t border-slate-100">
-                    <button type="submit" class="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-lg text-sm shadow-md transition hover:bg-emerald-600">บันทึกชั้นข้อมูล</button>
-                    <button type="button" id="btnDeleteLayer" onclick="window.deleteCurrentLayer()" class="hidden w-full bg-red-50 text-red-500 font-bold py-2.5 rounded-lg text-sm border border-red-100 hover:bg-red-500 hover:text-white transition">ลบชั้นข้อมูลนี้ทิ้ง</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="labelModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl m-4">
-            <div class="flex justify-between items-center mb-5 border-b pb-3">
-                <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-tags text-amber-500 mr-2"></i> ตั้งค่าป้ายชื่อบนแผนที่</h2>
-                <button type="button" onclick="window.toggleModal('labelModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <input type="hidden" id="label_layer_name">
-            <div class="mb-5">
-                <label class="block text-xs font-bold text-slate-600 mb-2">เลือกข้อมูลที่ต้องการแสดง:</label>
-                <select id="label_field_select" class="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white outline-none focus:border-amber-500"></select>
-            </div>
-            <div class="flex gap-2">
-                <button type="button" onclick="window.turnOffLabels()" class="w-1/3 bg-slate-100 text-slate-600 font-bold py-2.5 rounded-lg text-xs hover:bg-slate-200 transition border border-slate-200">ปิดป้ายชื่อ</button>
-                <button type="button" onclick="window.saveLabelSettings()" class="w-2/3 bg-amber-500 text-white font-bold py-2.5 rounded-lg text-xs shadow-md hover:bg-amber-600 transition"><i class="fa-solid fa-eye mr-1"></i> แสดงบนแผนที่</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="colorModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl m-4">
-            <div class="flex justify-between items-center mb-5 border-b pb-3">
-                <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-palette text-pink-500 mr-2"></i> แยกสีตามข้อมูล</h2>
-                <button type="button" onclick="window.toggleModal('colorModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <input type="hidden" id="color_layer_name">
-            <div class="mb-5">
-                <label class="block text-xs font-bold text-slate-600 mb-2">เลือกฟิลด์ข้อมูลที่ต้องการแยกสี:</label>
-                <select id="color_field_select" class="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-white outline-none focus:border-pink-500"></select>
-                <p class="text-[10px] text-slate-500 mt-2"><i class="fa-solid fa-circle-info"></i> รองรับเฉพาะฟิลด์ประเภท "ข้อความ" และ "ตัวเลือก (Dropdown)" เท่านั้น</p>
-            </div>
-            <div class="flex gap-2">
-                <button type="button" onclick="window.turnOffColors()" class="w-1/3 bg-slate-100 text-slate-600 font-bold py-2.5 rounded-lg text-xs hover:bg-slate-200 transition border border-slate-200">ใช้สีดั้งเดิม</button>
-                <button type="button" onclick="window.saveColorSettings()" class="w-2/3 bg-pink-500 text-white font-bold py-2.5 rounded-lg text-xs shadow-md hover:bg-pink-600 transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> แยกสีอัตโนมัติ</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="analyticsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
-        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform scale-95 transition-transform duration-300 m-4" id="analyticsModalContent">
-            <div class="flex justify-between items-center mb-5 border-b pb-3">
                 <div>
-                    <h2 class="text-lg font-bold text-slate-800" id="analyticsTitle"><i class="fa-solid fa-chart-pie text-purple-500 mr-2"></i> สรุปข้อมูล</h2>
-                    <p class="text-xs text-slate-500" id="analyticsSubtitle">ภาพรวมชั้นข้อมูล</p>
-                </div>
-                <button type="button" onclick="window.toggleModal('analyticsModal')" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
-                    <span class="block text-xs font-bold text-slate-400 mb-1 uppercase">จำนวนพิกัด</span>
-                    <span class="text-3xl font-bold text-slate-800" id="analyticsCount">0</span>
-                </div>
-                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center" id="analyticsGeoStatBox">
-                    <span class="block text-xs font-bold text-slate-400 mb-1 uppercase" id="analyticsGeoLabel">-</span>
-                    <span class="text-2xl font-bold text-emerald-500" id="analyticsGeoValue">-</span>
+                    <h1 class="text-lg font-semibold tracking-wide text-emerald-400">Maechan GIS</h1>
+                    <p class="text-xs text-slate-400">SMART CITY DATA PLATFORM</p>
                 </div>
             </div>
-            <div class="bg-slate-50 rounded-xl border border-slate-100 p-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-[10px] md:text-xs font-bold text-slate-500" id="chartLabel">สัดส่วนข้อมูลตาม:</h3>
-                    <select id="analyticsFieldSelect" class="text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:border-purple-500 bg-white max-w-[120px]" onchange="window.updateAnalyticsChart()"></select>
-                </div>
-                <div class="h-48 relative flex justify-center w-full" id="chartContainer">
-                    <canvas id="layerAnalyticsChart"></canvas>
+
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-sm font-medium tracking-wider text-slate-300">ชั้นข้อมูล (LAYERS)</span>
+                <input type="file" id="shpFileInput" accept=".zip" class="hidden" onchange="handleShpUpload(event)">
+                <button onclick="triggerFileInput()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1 font-medium transition shadow-md shadow-emerald-900/20">
+                    <i class="fa-solid fa-plus text-xs"></i> <span>เพิ่ม</span>
+                </button>
+            </div>
+
+            <div class="space-y-3" id="layerContainer">
+                <div class="bg-slate-700/50 p-3 rounded-xl border border-slate-600/50 flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <input type="checkbox" checked class="w-4 h-4 text-emerald-500 rounded bg-slate-800 border-slate-600 focus:ring-emerald-500">
+                        <span class="text-sm text-slate-200">ผังเมืองแม่จัน</span>
+                    </div>
+                    <div class="flex space-x-2 text-slate-400 text-xs">
+                        <button class="hover:text-white"><i class="fa-solid fa-eye"></i></button>
+                        <button class="hover:text-white"><i class="fa-solid fa-gear"></i></button>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <div class="p-4 border-t border-slate-700 text-center text-xs text-slate-500 font-light bg-slate-850">
+            Designed by Kru Best &copy; 2026
+        </div>
     </div>
 
-    <div id="loadingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] hidden flex items-center justify-center">
-        <div class="bg-white rounded-xl p-6 flex flex-col items-center shadow-2xl m-4 text-center">
-            <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
-            <p class="font-bold text-slate-700" id="loadingText">กำลังประมวลผล...</p>
+    <div class="flex-1 relative">
+        <div id="map"></div>
+        
+        <div id="loadingOverlay" class="hidden absolute inset-0 bg-slate-900/80 z-[1000] flex flex-col items-center justify-content justify-center space-y-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+            <p class="text-sm text-slate-300 font-medium">กำลังนำเข้าข้อมูล...</p>
         </div>
     </div>
 
     <script>
-        let defaultCenter = [20.1525, 99.8475];
-        let defaultZoom = 15;
-        try {
-            const savedCenter = JSON.parse(localStorage.getItem('maechanMapCenter'));
-            const savedZoom = localStorage.getItem('maechanMapZoom');
-            if(savedCenter && savedCenter.lat) defaultCenter = [savedCenter.lat, savedCenter.lng];
-            if(savedZoom) defaultZoom = parseInt(savedZoom);
-        } catch(e){}
-
-        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19 });
-        const googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, attribution: '© Google' });
-
-        const map = L.map('map', { center: defaultCenter, zoom: defaultZoom, layers: [osmLayer], zoomControl: false, maxZoom: 22 });
-        L.control.zoom({ position: 'topleft' }).addTo(map);
-        L.control.layers({ "แผนที่ถนน (OSM)": osmLayer, "ดาวเทียม (Google Maps)": googleSatellite }, null, {position: 'bottomright'}).addTo(map);
+        // 1. Initialize Leaflet Map (พิกัดเริ่มต้น อำเภอแม่จัน เชียงราย)
+        const map = L.map('map').setView([20.1472, 99.8532], 14);
         
-        map.pm.addControls({ 
-            position: 'topleft', 
-            drawMarker: true, drawCircleMarker: false, drawPolyline: true, drawPolygon: true, 
-            drawCircle: false, drawText: false, editMode: false, dragMode: false, cutPolygon: false, removalMode: false
-        });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
 
-        window.saveMapStateAndReload = function() {
-            localStorage.setItem('maechanMapCenter', JSON.stringify(map.getCenter()));
-            localStorage.setItem('maechanMapZoom', map.getZoom());
-            window.location.reload(); 
-        };
-
-        window.manualRefresh = function() {
-            window.showLoading('กำลังรีเฟรชข้อมูล...');
-            window.saveMapStateAndReload();
-        };
-
-        let highlightedLayer = null; let highlightedOriginalStyle = null;
-        let layerVisibilityState = JSON.parse(localStorage.getItem('maechanLayerVisibility')) || {};
-        let activeLayerState = localStorage.getItem('maechanActiveLayer');
-        let labelFieldState = JSON.parse(localStorage.getItem('maechanLabelFieldState')) || {};
-        
-        // 🚀 ตัวแปรสำหรับระบบแยกสี (Thematic Mapping) 🚀
-        let colorFieldState = JSON.parse(localStorage.getItem('maechanColorFieldState')) || {};
-        let categoryColors = {}; 
-        const colorPalette = ['#ef4444', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f97316', '#6366f1', '#10b981'];
-
-        let appLayers = []; let layerGroups = {}; let allFeatures = [];
-        let currentAnalyticsLayer = ''; let bufferGroup = L.layerGroup().addTo(map);
-
-        window.normalizeFeatures = function(featuresArray) {
-            if (!Array.isArray(featuresArray)) return [];
-            return featuresArray.map(f => {
-                if (!f) return null;
-                if (f.type === "Feature" && f.geometry) return f;
-                if (f.coordinates) return { type: "Feature", geometry: { type: f.type, coordinates: f.coordinates }, properties: f.properties || {} };
-                if (f.geometry) return { type: "Feature", geometry: f.geometry, properties: f.properties || {} };
-                return null;
-            }).filter(f => f !== null && f.geometry && f.geometry.type);
-        };
-
-        window.getPinIcon = function(color) {
-            const html = `<div style="width: 28px; height: 28px; background-color: ${color}; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid #ffffff; box-shadow: 2px 2px 6px rgba(0,0,0,0.5); position: relative; left: -14px; top: -28px;"><div style="width: 10px; height: 10px; background-color: #ffffff; border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div></div>`;
-            return L.divIcon({ html: html, className: 'custom-pin-marker', iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, -32] });
-        };
-        
-        // 🚀 ฟังก์ชันดึงสีของหมุด/เส้น ตามการตั้งค่าแยกสี 🚀
-        window.getFeatureColor = function(f, lInfo) {
-            const layerName = f.properties.layer_name;
-            const fieldName = colorFieldState[layerName];
-            if (fieldName && categoryColors[layerName]) {
-                const val = f.properties[fieldName];
-                const key = (!val || val.toString().trim() === '') ? 'ไม่ระบุ' : val.toString();
-                return categoryColors[layerName][key] || (lInfo ? lInfo.color : '#3388ff');
-            }
-            return lInfo ? lInfo.color : '#3388ff';
-        };
-
-        window.formatDistance = function(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(2)} กม.` : `${meters.toFixed(2)} ม.`; }
-        window.formatArea = function(sqm) { const rai = Math.floor(sqm / 1600); const rem = sqm % 1600; const ngan = Math.floor(rem / 400); const sqwa = rem % 400 / 4; let text = ''; if (rai > 0) text += rai + ' ไร่ '; if (ngan > 0) text += ngan + ' งาน '; if (sqwa > 0 || text === '') text += sqwa.toFixed(1) + ' ตร.ว.'; return text.trim(); }
-        window.getMeasurementBadge = function(geojson) { try { if (geojson.geometry.type === 'LineString' || geojson.geometry.type === 'MultiLineString') { return `<div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-blue-100 shadow-sm"><i class="fa-solid fa-ruler-horizontal mr-1"></i> ความยาว: ${window.formatDistance(turf.length(geojson, {units: 'meters'}))}</div>`; } else if (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon') { return `<div class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-md text-xs mb-3 font-bold border border-emerald-100 shadow-sm"><i class="fa-solid fa-draw-polygon mr-1"></i> พื้นที่: ${window.formatArea(turf.area(geojson))}</div>`; } } catch(e) { console.error(e); } return ''; }
-
-        window.updateActiveLayerBadge = function() {
-            const activeName = localStorage.getItem('maechanActiveLayer');
-            const badge = document.getElementById('active-layer-badge');
-            const badgeName = document.getElementById('badge-name');
-            const badgeColor = document.getElementById('badge-color');
-
-            if (!activeName || appLayers.length === 0) {
-                badge.classList.add('opacity-0');
-                return;
-            }
-
-            const lInfo = appLayers.find(l => l.name === activeName);
-            if (lInfo) {
-                badge.classList.remove('opacity-0');
-                badgeName.innerText = lInfo.name;
-                badgeName.style.color = lInfo.color;
-                badgeColor.style.backgroundColor = lInfo.color;
-            }
-        };
-
-        window.toggleSidebar = function() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); document.getElementById('mobile-overlay').classList.toggle('hidden'); setTimeout(() => document.getElementById('mobile-overlay').classList.toggle('opacity-0'), 10); }
-        window.toggleModal = function(id) { const modal = document.getElementById(id); if(modal.classList.contains('hidden')) { modal.classList.remove('hidden'); setTimeout(() => modal.classList.remove('opacity-0'), 10); } else { modal.classList.add('opacity-0'); setTimeout(() => modal.classList.add('hidden'), 300); } }
-        window.showLoading = function(msg = 'กำลังประมวลผล...') { document.getElementById('loadingText').innerText = msg; document.getElementById('loadingModal').classList.remove('hidden'); }
-        window.hideLoading = function() { document.getElementById('loadingModal').classList.add('hidden'); }
-
-        map.on('popupopen', function(e) {
-            const layer = e.popup._source; if (!layer) return; 
-            if (layer.setStyle && !(layer instanceof L.Marker)) {
-                if (highlightedLayer && highlightedOriginalStyle) { highlightedLayer.setStyle(highlightedOriginalStyle); }
-                highlightedLayer = layer; highlightedOriginalStyle = { color: layer.options.color, fillColor: layer.options.fillColor, weight: layer.options.weight || 4 };
-                layer.setStyle({ color: '#1e293b', fillColor: '#1e293b', weight: 6 }); if (layer.bringToFront) { layer.bringToFront(); }
-            }
-        });
-        map.on('popupclose', function(e) {
-            if (highlightedLayer && highlightedOriginalStyle) { highlightedLayer.setStyle(highlightedOriginalStyle); highlightedLayer = null; highlightedOriginalStyle = null; }
-        });
-
-        window.fetchLayers = async function() {
-            try {
-                const res = await fetch('/api/layers?v=' + new Date().getTime(), { cache: 'no-store' });
-                appLayers = await res.json();
-                const container = document.getElementById('layer-container');
-                container.innerHTML = '';
-                
-                Object.values(layerGroups).forEach(g => { g.clearLayers(); map.removeLayer(g); });
-                layerGroups = {}; 
-                
-                appLayers.forEach((layer, index) => {
-                    layerGroups[layer.name] = L.featureGroup();
-                    let isVisible = layerVisibilityState[layer.name] !== undefined ? layerVisibilityState[layer.name] : true;
-                    let checkedAttr = isVisible ? 'checked' : '';
-                    if (isVisible) { map.addLayer(layerGroups[layer.name]); }
-                    
-                    let isRadioChecked = activeLayerState ? ((layer.name === activeLayerState) ? 'checked' : '') : ((index === 0) ? 'checked' : '');
-                    let labelIsActive = !!labelFieldState[layer.name];
-                    let labelBtnColor = labelIsActive ? 'text-amber-400' : 'text-slate-400';
-                    
-                    // 🚀 เช็กสถานะการแยกสี
-                    let colorIsActive = !!colorFieldState[layer.name];
-                    let colorBtnColor = colorIsActive ? 'text-pink-400' : 'text-slate-400';
-                    
-                    const safeNameAttr = layer.name.replace(/"/g, '&quot;');
-
-                    container.innerHTML += `
-                        <div class="relative group mb-2">
-                            <input type="radio" name="active_layer" value="${layer.name}" id="radio_${index}" class="layer-selector sr-only" ${isRadioChecked} onchange="localStorage.setItem('maechanActiveLayer', this.value); window.updateGeomanStyle(); window.updateActiveLayerBadge();">
-                            <div class="flex items-center justify-between p-2 bg-slate-800 rounded-xl border-2 border-transparent transition group-hover:bg-slate-700">
-                                <label for="radio_${index}" class="flex items-center gap-2 cursor-pointer flex-1 w-full overflow-hidden pr-2">
-                                    <input type="checkbox" ${checkedAttr} class="w-4 h-4 accent-emerald-500 layer-toggle shrink-0" data-layer="${safeNameAttr}" onchange="window.toggleLayerVisibility(this)">
-                                    <span class="text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis" style="color: ${layer.color}" title="${layer.name}"><i class="fa-solid fa-layer-group mr-1 pointer-events-none"></i>${layer.name}</span>
-                                </label>
-                                <div class="flex gap-0 shrink-0 z-10 relative">
-                                    <button type="button" data-layer="${safeNameAttr}" onclick="window.openColorModal(this.getAttribute('data-layer'))" class="${colorBtnColor} hover:text-pink-400 p-1.5 rounded hover:bg-slate-900 transition" title="แยกสีตามข้อมูล"><i class="fa-solid fa-palette text-xs pointer-events-none"></i></button>
-                                    
-                                    <button type="button" data-layer="${safeNameAttr}" onclick="window.openLabelModal(this.getAttribute('data-layer'))" class="${labelBtnColor} hover:text-amber-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตั้งค่าแสดงป้ายชื่อ"><i class="fa-solid fa-tag text-xs pointer-events-none"></i></button>
-                                    <button type="button" data-layer="${safeNameAttr}" onclick="window.openLayerDashboard(this.getAttribute('data-layer'))" class="text-slate-400 hover:text-purple-400 p-1.5 rounded hover:bg-slate-900 transition" title="แดชบอร์ด"><i class="fa-solid fa-chart-pie text-xs pointer-events-none"></i></button>
-                                    <button type="button" data-layer="${safeNameAttr}" onclick="window.openTable(this.getAttribute('data-layer'))" class="text-slate-400 hover:text-blue-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตารางข้อมูล"><i class="fa-solid fa-table-list text-xs pointer-events-none"></i></button>
-                                    <button type="button" data-layer="${safeNameAttr}" onclick="window.openEditModal(this.getAttribute('data-layer'))" class="text-slate-400 hover:text-emerald-400 p-1.5 rounded hover:bg-slate-900 transition" title="ตั้งค่าเลเยอร์"><i class="fa-solid fa-pen text-xs pointer-events-none"></i></button>
-                                    <button type="button" data-layer="${safeNameAttr}" onclick="window.deleteCurrentLayer(this.getAttribute('data-layer'))" class="text-slate-400 hover:text-red-400 p-1.5 rounded hover:bg-slate-900 transition" title="ลบเลเยอร์"><i class="fa-solid fa-trash-can text-xs pointer-events-none"></i></button>
-                                </div>
-                            </div>
-                        </div>`;
-                });
-                
-                window.updateGeomanStyle();
-                window.updateActiveLayerBadge(); 
-                
-                const resFeat = await fetch(`/api/features?v=${new Date().getTime()}`, { cache: 'no-store' }); 
-                const dataFeat = await resFeat.json();
-                allFeatures = window.normalizeFeatures(dataFeat.features);
-                window.renderFeaturesOnMap();
-                
-            } catch (err) { console.error("Error fetching layers: ", err); }
-        };
-
-        window.updateGeomanStyle = function() {
-            const activeName = localStorage.getItem('maechanActiveLayer');
-            if (activeName && appLayers.length > 0) {
-                const lInfo = appLayers.find(l => l.name === activeName);
-                if (lInfo) {
-                    map.pm.setGlobalOptions({
-                        markerStyle: { icon: window.getPinIcon(lInfo.color) },
-                        pathOptions: { color: lInfo.color, weight: 4 }
-                    });
-                }
-            }
-        };
-
-        window.toggleLayerVisibility = function(checkbox) { 
-            const layerName = checkbox.getAttribute('data-layer'); 
-            if(checkbox.checked) { 
-                map.addLayer(layerGroups[layerName]); 
-                layerVisibilityState[layerName] = true; 
-            } else { 
-                map.removeLayer(layerGroups[layerName]); 
-                layerVisibilityState[layerName] = false; 
-            } 
-            localStorage.setItem('maechanLayerVisibility', JSON.stringify(layerVisibilityState)); 
-            window.updateLegend(); 
-        };
-
-        // ฟังก์ชันตั้งค่าป้ายชื่อ (Label)
-        window.openLabelModal = function(layerName) { document.getElementById('label_layer_name').value = layerName; const lInfo = appLayers.find(l => l.name === layerName); const select = document.getElementById('label_field_select'); select.innerHTML = '<option value="id">ID (รหัสพิกัด)</option>'; if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; }); } if(labelFieldState[layerName]) { select.value = labelFieldState[layerName]; } window.toggleModal('labelModal'); }
-        window.saveLabelSettings = function() { const layerName = document.getElementById('label_layer_name').value; const field = document.getElementById('label_field_select').value; labelFieldState[layerName] = field; localStorage.setItem('maechanLabelFieldState', JSON.stringify(labelFieldState)); window.saveMapStateAndReload(); }
-        window.turnOffLabels = function() { const layerName = document.getElementById('label_layer_name').value; delete labelFieldState[layerName]; localStorage.setItem('maechanLabelFieldState', JSON.stringify(labelFieldState)); window.saveMapStateAndReload(); }
-
-        // 🚀 ฟังก์ชันตั้งค่าแยกสี (Color Mapping) 🚀
-        window.openColorModal = function(layerName) { 
-            document.getElementById('color_layer_name').value = layerName; 
-            const lInfo = appLayers.find(l => l.name === layerName); 
-            const select = document.getElementById('color_field_select'); 
-            select.innerHTML = '<option value="">-- เลือกฟิลด์ข้อมูล --</option>'; 
-            
-            if(lInfo && lInfo.fields) { 
-                lInfo.fields.forEach(f => { 
-                    if(f.type === 'Text' || f.type === 'Dropdown') {
-                        select.innerHTML += `<option value="${f.name}">${f.name}</option>`; 
-                    }
-                }); 
-            } 
-            if(colorFieldState[layerName]) { select.value = colorFieldState[layerName]; } 
-            window.toggleModal('colorModal'); 
+        // ฟังก์ชันเปิดเลือกไฟล์
+        function triggerFileInput() {
+            document.getElementById('shpFileInput').click();
         }
 
-        window.saveColorSettings = function() { 
-            const layerName = document.getElementById('color_layer_name').value; 
-            const field = document.getElementById('color_field_select').value; 
-            if(!field) return window.turnOffColors();
-            colorFieldState[layerName] = field; 
-            localStorage.setItem('maechanColorFieldState', JSON.stringify(colorFieldState)); 
-            window.saveMapStateAndReload(); 
-        }
+        // 2. ฟังก์ชันจัดการไฟล์และแก้ไขบักดักจับ Null / Empty Type ตัวปัญหา
+        async function handleShpUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
 
-        window.turnOffColors = function() { 
-            const layerName = document.getElementById('color_layer_name').value; 
-            delete colorFieldState[layerName]; 
-            localStorage.setItem('maechanColorFieldState', JSON.stringify(colorFieldState)); 
-            window.saveMapStateAndReload(); 
-        }
-
-        // 🚀 ฟังก์ชันอัปเดตกล่องคำอธิบายสัญลักษณ์ (Legend) 🚀
-        window.updateLegend = function() {
-            const legendBox = document.getElementById('map-legend');
-            const legendItems = document.getElementById('legend-items');
-            legendItems.innerHTML = '';
-            let hasLegend = false;
-
-            appLayers.forEach(lInfo => {
-                const layerName = lInfo.name;
-                const fieldName = colorFieldState[layerName];
-                
-                if (layerVisibilityState[layerName] !== false && fieldName && categoryColors[layerName]) {
-                    hasLegend = true;
-                    let html = `<div class="mb-3"><div class="text-[10px] font-bold text-slate-400 mb-1.5 border-b border-slate-100 pb-1 truncate" title="${layerName}"><span style="color:${lInfo.color}">■</span> ${layerName}</div>`;
-                    
-                    for (const [val, color] of Object.entries(categoryColors[layerName])) {
-                        html += `<div class="flex items-center gap-2 mb-1.5"><span class="w-3.5 h-3.5 rounded-full shadow-sm block border border-white" style="background-color: ${color}"></span> <span class="text-xs text-slate-600 truncate">${val}</span></div>`;
-                    }
-                    html += `</div>`;
-                    legendItems.innerHTML += html;
-                }
-            });
-
-            if (hasLegend) {
-                legendBox.classList.remove('hidden');
-            } else {
-                legendBox.classList.add('hidden');
-            }
-        };
-
-        window.renderFeaturesOnMap = function() {
-            Object.values(layerGroups).forEach(g => g.clearLayers());
-
-            map.eachLayer((layer) => {
-                if (layer.feature && layer.feature.properties && layer.feature.properties.layer_name) {
-                    map.removeLayer(layer);
-                }
-            });
-
-            // 🚀 คำนวณชุดสี 🚀
-            categoryColors = {};
-            appLayers.forEach(lInfo => {
-                const fieldName = colorFieldState[lInfo.name];
-                if (fieldName) {
-                    categoryColors[lInfo.name] = {};
-                    let colorIndex = 0;
-                    const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === lInfo.name);
-                    
-                    const uniqueValues = [...new Set(featuresInLayer.map(f => {
-                        let v = f.properties[fieldName];
-                        return (!v || v.toString().trim() === '') ? 'ไม่ระบุ' : v.toString();
-                    }))];
-                    
-                    uniqueValues.forEach(val => {
-                        categoryColors[lInfo.name][val] = colorPalette[colorIndex % colorPalette.length];
-                        colorIndex++;
-                    });
-                }
-            });
-
-            window.updateLegend();
-
-            L.geoJSON({ type: "FeatureCollection", features: allFeatures }, {
-                pointToLayer: (f, latlng) => {
-                    const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
-                    const color = window.getFeatureColor(f, lInfo); 
-                    return L.marker(latlng, { icon: window.getPinIcon(color) });
-                },
-                style: (f) => {
-                    const lInfo = appLayers.find(l => l.name === f.properties.layer_name);
-                    const color = window.getFeatureColor(f, lInfo); 
-                    return { color: color, weight: 4 };
-                },
-                onEachFeature: (f, layer) => {
-                    const id = f.properties.id; const layerName = f.properties.layer_name; const lInfo = appLayers.find(l => l.name === layerName);
-                    let badgeHtml = window.getMeasurementBadge(f);
-                    
-                    let displayHtml = `<div style="width: 100%; box-sizing: border-box;" id="view_${id}">
-                        <h3 class="font-bold border-b pb-1 mb-2" style="color: ${window.getFeatureColor(f, lInfo)}">${layerName || 'ข้อมูล'}</h3>${badgeHtml}<div class="text-xs mb-3 space-y-1">`;
-                    
-                    let editHtml = `<div style="width: 100%; box-sizing: border-box;" class="hidden" id="edit_${id}">
-                        <h3 class="font-bold border-b pb-1 mb-2 text-amber-500"><i class="fa-solid fa-pen mr-1"></i>แก้ไขข้อมูล</h3>${badgeHtml}<div class="text-xs mb-3">`;
-
-                    if(lInfo && lInfo.fields) {
-                        lInfo.fields.forEach(field => {
-                            const val = f.properties[field.name] || ''; 
-                            
-                            displayHtml += `<p><span class="font-bold text-slate-500">${field.name}:</span> <span class="break-words">${val}</span></p>`;
-                            
-                            editHtml += `<div style="margin-bottom: 8px;">
-                                <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${field.name}</label>`;
-                            
-                            if (field.type === 'Dropdown' && field.options) {
-                                editHtml += `<select id="input_${id}_${field.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif; background: #fff;">`;
-                                editHtml += `<option value="">-- เลือกข้อมูล --</option>`;
-                                field.options.forEach(opt => {
-                                    const selected = (val === opt) ? 'selected' : '';
-                                    editHtml += `<option value="${opt}" ${selected}>${opt}</option>`;
-                                });
-                                editHtml += `</select>`;
-                            } else {
-                                let iType = field.type === 'Number' ? 'number' : (field.type === 'Date' ? 'date' : 'text');
-                                editHtml += `<input type="${iType}" id="input_${id}_${field.name}" value="${val}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">`;
-                            }
-                            
-                            editHtml += `</div>`;
-                        });
-                    }
-
-                    displayHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2"><button onclick="window.toggleEdit(${id})" class="flex-1 bg-amber-50 text-amber-600 py-1.5 rounded text-[10px] font-bold border border-amber-100 hover:bg-amber-500 hover:text-white transition"><i class="fa-solid fa-pen"></i> แก้ไข</button><button onclick="window.deleteFeature(${id})" class="flex-1 bg-red-50 text-red-500 py-1.5 rounded text-[10px] font-bold border border-red-100 hover:bg-red-50 hover:text-red-600 transition"><i class="fa-solid fa-trash"></i> ลบ</button></div></div>`;
-                    editHtml += `</div><div class="flex gap-2 border-t pt-2 mt-2"><button onclick="map.closePopup();" class="flex-1 bg-slate-100 text-slate-600 py-1.5 rounded text-[10px] font-bold hover:bg-slate-200 transition">ยกเลิก</button><button onclick="window.updateFeature(${id}, event)" class="flex-1 bg-emerald-500 text-white py-1.5 rounded text-[10px] font-bold shadow-md hover:bg-emerald-600 transition"><i class="fa-solid fa-save"></i> บันทึก</button></div></div>`;
-
-                    layer.feature = f;
-                    layer.bindPopup(`<div>${displayHtml}${editHtml}</div>`, { minWidth: 240, maxWidth: 300 });
-                    
-                    if (labelFieldState[layerName]) {
-                        const fieldName = labelFieldState[layerName];
-                        const text = fieldName === 'id' ? String(id) : (f.properties[fieldName] ? String(f.properties[fieldName]) : '-');
-                        layer.bindTooltip(text, { permanent: true, direction: 'auto', className: 'custom-map-label' });
-                    }
-
-                    if (layerGroups[layerName]) {
-                        layerGroups[layerName].addLayer(layer);
-                        if (f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) {
-                            try {
-                                const coords = turf.coordAll(f);
-                                if (coords.length > 1) {
-                                    const start = coords[0]; const end = coords[coords.length - 1]; 
-                                    const color = window.getFeatureColor(f, lInfo);
-                                    const nodeStyle = { radius: 4, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: 1, interactive: false };
-                                    layerGroups[layerName].addLayer(L.circleMarker([start[1], start[0]], nodeStyle));
-                                    layerGroups[layerName].addLayer(L.circleMarker([end[1], end[0]], nodeStyle));
-                                }
-                            } catch(e){}
-                        }
-                    }
-                }
-            });
-        };
-
-        map.pm.setLang('th');
-        map.on('pm:create', async (e) => {
-            const activeRadio = document.querySelector('input[name="active_layer"]:checked');
-            if (!activeRadio) { alert("กรุณาสร้างหรือเลือกชั้นข้อมูลก่อนครับ"); map.removeLayer(e.layer); return; }
-            const lInfo = appLayers.find(l => l.name === activeRadio.value);
-            
-            let tempLayer = e.layer;
-            
-            if (e.shape === "Marker") {
-                const latlng = e.layer.getLatLng();
-                try { map.removeLayer(e.layer); } catch(err){}
-                try { e.layer.remove(); } catch(err){}
-                tempLayer = L.marker(latlng, { icon: window.getPinIcon(lInfo.color) }).addTo(map);
-            } else { 
-                tempLayer = e.layer;
-                if(tempLayer.setStyle) tempLayer.setStyle({ color: lInfo.color, weight: 4 }); 
-            }
-            
-            window.tempLayer = tempLayer;
-            window.tempLayer._isSaved = false; 
-            
-            const geojsonForMeasurement = tempLayer.toGeoJSON ? tempLayer.toGeoJSON() : null;
-            let badgeHtml = geojsonForMeasurement ? window.getMeasurementBadge(geojsonForMeasurement) : '';
-
-            let formHtml = `<div style="width: 100%; box-sizing: border-box;"><div class="mb-3"><span class="text-[10px] font-bold text-white px-2 py-1 rounded uppercase tracking-wide" style="background-color: ${lInfo.color}">${lInfo.name}</span></div>${badgeHtml}`;
-            
-            lInfo.fields.forEach(f => {
-                formHtml += `<div style="margin-bottom: 8px;">
-                    <label style="display: block; font-weight: bold; color: #475569; margin-bottom: 4px; font-size: 10px;">${f.name}</label>`;
-                
-                if (f.type === 'Dropdown' && f.options) {
-                    formHtml += `<select id="new_f_${f.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif; background: #fff;">`;
-                    formHtml += `<option value="">-- เลือกข้อมูล --</option>`;
-                    f.options.forEach(opt => {
-                        formHtml += `<option value="${opt}">${opt}</option>`;
-                    });
-                    formHtml += `</select>`;
-                } else {
-                    let iType = f.type === 'Number' ? 'number' : (f.type === 'Date' ? 'date' : 'text');
-                    formHtml += `<input type="${iType}" id="new_f_${f.name}" style="width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none; font-family: 'Prompt', sans-serif;">`;
-                }
-                
-                formHtml += `</div>`;
-            });
-            formHtml += `<div class="flex gap-2 mt-2 pt-2 border-t border-slate-100"><button onclick="window.cancelNewFeature()" class="w-1/3 bg-slate-100 text-slate-600 py-1.5 rounded text-xs font-bold">ยกเลิก</button><button onclick="window.confirmSaveNewFeature('${lInfo.name}')" class="w-2/3 bg-emerald-500 text-white py-1.5 rounded text-xs font-bold shadow-md">บันทึกพิกัด</button></div></div>`;
-            
-            setTimeout(() => { tempLayer.bindPopup(formHtml, { minWidth: 240, maxWidth: 300 }).openPopup(); }, 100);
-
-            tempLayer.on('popupclose', function() {
-                setTimeout(() => {
-                    if (window.tempLayer === tempLayer && !window.tempLayer._isSaved) {
-                        try { map.removeLayer(tempLayer); } catch(err){}
-                        try { tempLayer.remove(); } catch(err){}
-                        window.tempLayer = null;
-                    }
-                }, 100);
-            });
-        });
-
-        window.cancelNewFeature = function() {
-            if(window.tempLayer) { 
-                try { map.removeLayer(window.tempLayer); } catch(err){}
-                try { window.tempLayer.remove(); } catch(err){}
-                window.tempLayer = null; 
-            }
-            map.closePopup();
-        };
-
-        window.toggleEdit = function(id) { document.getElementById(`view_${id}`).classList.toggle('hidden'); document.getElementById(`edit_${id}`).classList.toggle('hidden'); };
-
-        window.updateFeature = async function(id, btnEvent) {
-            try {
-                const featureIndex = allFeatures.findIndex(f => String(f.properties.id) === String(id));
-                if(featureIndex === -1) return;
-
-                const feature = allFeatures[featureIndex]; const props = { ...feature.properties };
-                const lInfo = appLayers.find(l => l.name === feature.properties.layer_name);
-
-                if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`input_${id}_${f.name}`); if(el) props[f.name] = el.value; }); }
-
-                btnEvent.target.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; 
-                window.showLoading('กำลังบันทึกและซิงค์ข้อมูล...');
-                
-                const geojsonData = { type: "Feature", geometry: feature.geometry, properties: props };
-                await fetch(`/api/features/${id}?v=${new Date().getTime()}`, {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ properties: props, geojson: geojsonData })
-                });
-
-                window.saveMapStateAndReload(); 
-
-            } catch (err) { alert("เกิดข้อผิดพลาดในการแก้ไข: " + err.message); window.hideLoading(); }
-        };
-
-        window.saveLayer = async function(e) { 
-            e.preventDefault(); 
-            window.showLoading('กำลังอัปเดตชั้นข้อมูล...'); 
-            const oldName = document.getElementById('edit_layer_name_old').value; 
-            const name = document.getElementById('new_layer_name').value; 
-            const color = document.getElementById('new_layer_color').value; 
-            const type = document.getElementById('new_layer_type').value; 
-            const fields = []; 
-            
-            document.querySelectorAll('#fields_container .field-row').forEach((row) => {
-                let fName = row.querySelector('.field-name').value;
-                let fType = row.querySelector('.field-type').value;
-                let fOptsStr = row.querySelector('.field-options').value;
-                
-                if (fType === 'Dropdown') {
-                    let opts = fOptsStr.split(',').map(s => s.trim()).filter(s => s !== '');
-                    fields.push({ name: fName, type: fType, options: opts });
-                } else {
-                    fields.push({ name: fName, type: fType });
-                }
-            }); 
-            
-            const payload = { name: name, color: color, type: type, fields: fields, old_name: oldName };
+            const loading = document.getElementById('loadingOverlay');
+            loading.classList.remove('hidden');
 
             try {
-                await fetch('/api/layers', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify(payload) 
-                });
-            } catch (err) { console.error(err); }
-            
-            setTimeout(() => { window.saveMapStateAndReload(); }, 1000); 
-        };
-
-        window.confirmSaveNewFeature = async function(layerName) {
-            try {
-                if(!window.tempLayer) return;
-                
-                const lInfo = appLayers.find(l => l.name === layerName); const properties = {};
-                if(lInfo && lInfo.fields) { lInfo.fields.forEach(f => { const el = document.getElementById(`new_f_${f.name}`); if(el) properties[f.name] = el.value; }); }
-                
-                const geojson = window.tempLayer.toGeoJSON ? window.tempLayer.toGeoJSON() : { type: "Feature", geometry: { type: "Point", coordinates: [window.tempLayer.getLatLng().lng, window.tempLayer.getLatLng().lat] } };
-                
-                window.showLoading('กำลังบันทึกและซิงค์ข้อมูล...');
-                
-                const response = await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: properties, geojson: geojson.geometry }) });
-                const data = await response.json(); if(data.status !== 'success') throw new Error("เกิดข้อผิดพลาดในการบันทึก");
-                
-                window.saveMapStateAndReload(); 
-                
-            } catch (err) { alert(err.message); window.hideLoading(); }
-        };
-
-        window.deleteFeature = async function(id) { 
-            if (confirm('คุณต้องการลบพิกัดนี้ถาวรใช่หรือไม่?')) { 
-                try {
-                    window.showLoading('กำลังลบข้อมูลและซิงค์แผนที่...');
-                    const response = await fetch(`/api/features/${id}?v=${new Date().getTime()}`, { method: 'DELETE' });
-                    const result = await response.json();
-                    if(result.status !== 'success') throw new Error("เซิร์ฟเวอร์ลบข้อมูลไม่สำเร็จ");
-                    
-                    window.saveMapStateAndReload(); 
-
-                } catch (err) {
-                    console.error("Error Delete:", err); alert("ลบข้อมูลผิดพลาด"); window.hideLoading();
-                }
-            } 
-        };
-
-        window.zoomToFeature = function(id) {
-            let targetLayer = null;
-            map.eachLayer((layer) => {
-                if (layer.feature && layer.feature.properties && String(layer.feature.properties.id) === String(id)) {
-                    targetLayer = layer;
-                }
-            });
-
-            if (targetLayer) {
-                if(window.innerWidth < 768) { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); }
-                const layerName = targetLayer.feature.properties.layer_name;
-                if (!layerVisibilityState[layerName]) {
-                    const safeNameAttr = layerName.replace(/"/g, '&quot;');
-                    const checkbox = document.querySelector(`input[data-layer="${safeNameAttr}"]`);
-                    if(checkbox) { checkbox.checked = true; window.toggleLayerVisibility(checkbox); }
-                }
-                const center = targetLayer.getBounds ? targetLayer.getBounds().getCenter() : targetLayer.getLatLng();
-                map.flyTo(center, 18, { duration: 0.5 }); 
-                setTimeout(() => { targetLayer.openPopup(); }, 600);
-            } else { alert("ไม่พบข้อมูลบนแผนที่ (อาจถูกซ่อนไว้)"); }
-        };
-
-        window.editFeatureFromTable = function(id) {
-            document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300);
-            window.zoomToFeature(id);
-            setTimeout(() => {
-                const viewEl = document.getElementById(`view_${id}`); const editEl = document.getElementById(`edit_${id}`);
-                if (viewEl && editEl) { viewEl.classList.add('hidden'); editEl.classList.remove('hidden'); }
-            }, 800); 
-        };
-
-        window.openTable = function(layerName) {
-            try {
-                const panel = document.getElementById('attribute-panel'); const mapEl = document.getElementById('map'); const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
-                document.getElementById('current-table-layer').innerText = layerName;
-                
-                const head = document.getElementById('table-head'); let headHtml = '<tr><th class="p-3 border-r w-12 text-center">ID</th>'; if (layerInfo.fields) { layerInfo.fields.forEach(f => headHtml += `<th class="p-3 border-r">${f.name}</th>`); } headHtml += '<th class="p-3 border-r text-center w-24">จัดการ</th></tr>'; head.innerHTML = headHtml;
-                
-                const body = document.getElementById('table-body'); const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName); let bodyHtml = '';
-                featuresInLayer.forEach(f => {
-                    bodyHtml += `<tr class="hover:bg-blue-50 border-b transition cursor-pointer" onclick="window.zoomToFeature(${f.properties.id})">`;
-                    bodyHtml += `<td class="p-2 border-r text-center text-slate-400">${f.properties.id}</td>`;
-                    if (layerInfo.fields) { layerInfo.fields.forEach(field => { bodyHtml += `<td class="p-2 border-r">${f.properties[field.name] || '-'}</td>`; }); }
-                    bodyHtml += `<td class="p-2 text-center whitespace-nowrap">
-                        <button onclick="event.stopPropagation(); window.editFeatureFromTable(${f.properties.id})" class="text-amber-500 hover:text-amber-600 mr-2" title="แก้ไขข้อมูล"><i class="fa-solid fa-pen pointer-events-none"></i></button>
-                        <button onclick="event.stopPropagation(); window.deleteFeature(${f.properties.id})" class="text-red-400 hover:text-red-600" title="ลบข้อมูล"><i class="fa-solid fa-trash-can pointer-events-none"></i></button>
-                    </td></tr>`;
-                });
-                body.innerHTML = bodyHtml || `<tr><td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">ไม่มีข้อมูล</td></tr>`;
-                panel.classList.add('open'); mapEl.style.height = window.innerWidth < 768 ? '55vh' : '65vh'; setTimeout(() => map.invalidateSize(), 300);
-            } catch (error) { alert("เกิดข้อผิดพลาดในการเปิดตาราง: " + error.message); }
-        };
-        
-        window.closeTable = function() { document.getElementById('attribute-panel').classList.remove('open'); document.getElementById('map').style.height = '100vh'; setTimeout(() => map.invalidateSize(), 300); };
-        window.filterTable = function() { const input = document.getElementById('table-search').value.toLowerCase(); const rows = document.getElementById('table-body').getElementsByTagName('tr'); for (let row of rows) { if(row.cells.length === 1) continue; row.style.display = row.innerText.toLowerCase().includes(input) ? '' : 'none'; } };
-
-        window.drawCombinedAnalysis = function() {
-            bufferGroup.clearLayers(); const activeRadio = document.querySelector('input[name="active_layer"]:checked'); if (!activeRadio) return;
-            const activeName = activeRadio.value; const selectedRadius = parseInt(document.getElementById('bufferRadiusSelect').value);
-            let pixelRadius = selectedRadius >= 400 ? 100 : (selectedRadius >= 200 ? 80 : (selectedRadius >= 100 ? 60 : 40));
-            let heatPoints = []; let pointCount = 0;
-
-            allFeatures.forEach(f => {
-                if (f.geometry && f.properties.layer_name === activeName && f.geometry.type === 'Point') {
-                    const lat = f.geometry.coordinates[1]; const lng = f.geometry.coordinates[0]; const color = appLayers.find(l => l.name === activeName)?.color || '#a855f7'; 
-                    bufferGroup.addLayer(L.circle([lat, lng], { radius: selectedRadius, color: color, weight: 2, dashArray: '4', fillColor: color, fillOpacity: 0.05, interactive: false }));
-                    heatPoints.push([lat, lng, 1]); pointCount++;
-                }
-            });
-            if (pointCount > 0) {
-                bufferGroup.addLayer(L.heatLayer(heatPoints, { radius: pixelRadius, blur: pixelRadius - 10, maxZoom: 17, gradient: {0.4: '#3b82f6', 0.6: '#10b981', 0.8: '#eab308', 1.0: '#ef4444'} }));
-                map.flyToBounds(bufferGroup.getBounds(), {padding: [30, 30], duration: 0.8});
-            } else { alert(`ไม่พบข้อมูลแบบจุดในชั้นข้อมูล [${activeName}] สำหรับวิเคราะห์ครับ`); }
-        };
-        window.clearBufferArea = function() { bufferGroup.clearLayers(); };
-
-        window.openLayerDashboard = function(layerName) {
-            try {
-                const layerInfo = appLayers.find(l => l.name === layerName); if(!layerInfo) { alert('ไม่พบข้อมูลเลเยอร์'); return; }
-                currentAnalyticsLayer = layerName; const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === layerName);
-                
-                document.getElementById('analyticsTitle').innerHTML = `<i class="fa-solid fa-chart-pie mr-2" style="color:${layerInfo.color}"></i> สรุป: ${layerName}`; 
-                document.getElementById('analyticsCount').innerText = featuresInLayer.length.toLocaleString();
-                
-                const geoBox = document.getElementById('analyticsGeoStatBox'); const geoLabel = document.getElementById('analyticsGeoLabel'); const geoValue = document.getElementById('analyticsGeoValue');
-                
-                if(layerInfo.type === 'Line') { 
-                    geoBox.classList.remove('hidden'); geoLabel.innerText = "ความยาวรวม"; let totalMeters = 0; 
-                    featuresInLayer.forEach(f => { if(f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) totalMeters += turf.length(f, {units: 'meters'}); }); 
-                    geoValue.innerText = window.formatDistance(totalMeters); geoValue.className = "text-xl font-bold text-blue-500"; 
-                } else if (layerInfo.type === 'Point') { 
-                    geoBox.classList.remove('hidden'); geoLabel.innerText = "สถานะ"; geoValue.innerText = "จุดพิกัด"; geoValue.className = "text-xl font-bold text-slate-400"; 
-                } else { 
-                    geoBox.classList.remove('hidden'); geoLabel.innerText = "พื้นที่รวม"; let totalSqm = 0; 
-                    featuresInLayer.forEach(f => { if(f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) totalSqm += turf.area(f); }); 
-                    geoValue.innerText = window.formatArea(totalSqm); geoValue.className = "text-xl font-bold text-emerald-500"; 
-                }
-                
-                window.toggleModal('analyticsModal');
-                
-                setTimeout(() => {
+                const reader = new FileReader();
+                reader.onload = async function (e) {
                     try {
-                        const select = document.getElementById('analyticsFieldSelect'); select.innerHTML = '';
-                        if(layerInfo.fields && layerInfo.fields.length > 0) { 
-                            layerInfo.fields.forEach(f => { select.innerHTML += `<option value="${f.name}">${f.name}</option>`; }); 
-                            select.style.display = 'block'; document.getElementById('chartLabel').style.display = 'block';
-                            window.updateAnalyticsChart(); 
-                        } else { 
-                            select.style.display = 'none'; document.getElementById('chartLabel').style.display = 'none';
-                            window.drawEmptyChart(layerInfo.color, featuresInLayer.length); 
+                        const buffer = e.target.result;
+                        // แปลง Shapefile Zip เป็น GeoJSON โดยพึ่งพา shpjs
+                        const geojson = await shp(buffer);
+                        
+                        let rawFeatures = [];
+                        if (Array.isArray(geojson)) {
+                            geojson.forEach(layer => { if (layer && layer.features) rawFeatures.push(...layer.features); });
+                        } else if (geojson && geojson.features) {
+                            rawFeatures = geojson.features;
                         }
-                    } catch(e) { console.error("Chart Error: ", e); }
-                }, 200);
 
-            } catch (error) { alert("เกิดข้อผิดพลาดในการเปิดแดชบอร์ด: " + error.message); }
-        };
+                        // ==========================================
+                        // แก้ไขจุดเกิดเหตุหลัก: ล้างข้อมูลเสียฝั่ง Frontendก่อนส่ง
+                        // ==========================================
+                        const cleanFeatures = rawFeatures.filter(feature => {
+                            return (
+                                feature !== null && 
+                                typeof feature === 'object' &&
+                                feature.type !== undefined && // ป้องกันการอ่าน 'type' ของ null
+                                feature.type === 'Feature' &&
+                                feature.geometry !== null &&
+                                feature.geometry.type !== undefined
+                            );
+                        }).map(feature => {
+                            // ป้องกันกรณีที่ Properties ด้านในหลุดค่าว่างเปล่า (None)
+                            if (!feature.properties || feature.properties === null) {
+                                feature.properties = {};
+                            }
+                            return feature;
+                        });
 
-        window.updateAnalyticsChart = function() {
-            const fieldName = document.getElementById('analyticsFieldSelect').value; const featuresInLayer = allFeatures.filter(f => f.properties.layer_name === currentAnalyticsLayer);
-            const counts = {}; featuresInLayer.forEach(f => { let val = f.properties[fieldName]; if(!val || val.toString().trim()==='') val = "ไม่ระบุ"; counts[val] = (counts[val] || 0) + 1; });
-            document.getElementById('chartContainer').innerHTML = '<canvas id="layerAnalyticsChart"></canvas>';
-            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); 
-            const bgColors = Object.keys(counts).map((key, i) => key === 'ไม่ระบุ' ? '#cbd5e1' : `hsl(${(i * 137.5) % 360}, 70%, 60%)`);
-            new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: bgColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 8, font: { size: 10, family: 'Prompt' } } } }, cutout: '65%' } });
-        };
+                        // หากไม่มีข้อมูลฟีเจอร์ใช้งานได้เลย ให้แจ้งเตือนตัดจบการทำงาน
+                        if (cleanFeatures.length === 0) {
+                            throw new Error("โครงสร้างภายในไฟล์เสียหาย หรือไม่มีพิกัดรูปทรง (Geometry Null)");
+                        }
 
-        window.drawEmptyChart = function(color, count) { 
-            document.getElementById('chartContainer').innerHTML = '<canvas id="layerAnalyticsChart"></canvas>';
-            const ctx = document.getElementById('layerAnalyticsChart').getContext('2d'); 
-            new Chart(ctx, { type: 'doughnut', data: { labels: ['ทั้งหมด'], datasets: [{ data: [count || 1], backgroundColor: [color], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '75%' } }); 
-        };
+                        // ประกอบกลับร่างเป็น GeoJSON FeatureCollection สมบูรณ์
+                        const cleanGeoJSON = {
+                            type: "FeatureCollection",
+                            features: cleanFeatures
+                        };
 
-        window.importShpHandler = async function(event) {
-            const file = event.target.files[0]; if (!file) return;
-            let layerNamePrompt = prompt("ตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); if (!layerNamePrompt) { event.target.value = ''; return; }
-            window.showLoading('กำลังนำเข้าข้อมูล...');
-            try {
-                const geojsonAll = await shp(await file.arrayBuffer());
-                let featuresByGeometry = { 'Point': [], 'LineString': [], 'Polygon': [], 'MultiPoint': [], 'MultiLineString': [], MultiPolygon: [] };
-                geojsonAll.features.forEach(f => { if (featuresByGeometry[f.geometry.type]) featuresByGeometry[f.geometry.type].push(f); });
+                        // 3. ยิงข้อมูลไปหาหลังบ้านเพื่อบันทึก
+                        sendDataToBackend(cleanGeoJSON);
 
-                for (let geomType in featuresByGeometry) {
-                    const features = featuresByGeometry[geomType];
-                    if (features.length === 0) continue;
-                    let newLayerName = `${layerNamePrompt}_${geomType}`; let color = `#${Math.floor(Math.random()*16777215).toString(16)}`; 
-                    let autoFields = []; for(let key in features[0].properties) { autoFields.push({name: key, type: 'Text'}); }
+                        // 4. Render แสดงผลบนแผ่นที่ Leaflet ทันที
+                        L.geoJSON(cleanGeoJSON, {
+                            style: function (feature) {
+                                return { color: "#10b981", weight: 3, opacity: 0.8 };
+                            },
+                            onEachFeature: function (feature, layer) {
+                                if (feature.properties) {
+                                    let popupContent = "<div class='text-slate-800 font-medium mb-1 border-b pb-1 text-sm text-emerald-600'>รายละเอียดข้อมูล</div><table class='w-full text-xs text-left text-slate-600'>";
+                                    for (let key in feature.properties) {
+                                        if(typeof feature.properties[key] !== 'object'){
+                                            popupContent += `<tr><td class='font-semibold py-0.5 pr-2'>${key}:</td><td>${feature.properties[key]}</td></tr>`;
+                                        }
+                                    }
+                                    popupContent += "</table>";
+                                    layer.bindPopup(popupContent);
+                                }
+                            }
+                        }).addTo(map);
 
-                    await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newLayerName, color: color, type: (geomType.includes('Point') ? 'Point' : 'Line'), fields: autoFields }) });
-                    for(let feature of features) {
-                        feature.properties.layer_name = newLayerName; 
-                        await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: newLayerName, properties: feature.properties, geojson: feature.geometry }) });
+                    } catch (err) {
+                        alert("เกิดข้อผิดพลาดในการประมวลผลไฟล์: " + err.message);
+                    } finally {
+                        loading.classList.add('hidden');
+                        document.getElementById('shpFileInput').value = ''; // ล้างค่าสเตตัสเก่า
                     }
-                }
-                alert(`นำเข้าข้อมูลเรียบร้อยแล้วครับ!`); window.saveMapStateAndReload();
-            } catch (err) { alert("Error: " + err.message); window.hideLoading(); event.target.value = ''; }
-        };
-
-        window.importFileHandler = async function(event) {
-            const file = event.target.files[0]; if (!file) return;
-            let layerName = prompt("ตั้งชื่อชั้นข้อมูลสำหรับไฟล์ที่นำเข้า:", file.name.split('.')[0]); if (!layerName) { event.target.value = ''; return; }
-            window.showLoading('กำลังนำเข้าข้อมูล...');
-            try {
-                const geojson = JSON.parse(await file.text());
-                if (!geojson || !geojson.features) throw new Error("ไฟล์ไม่ถูกต้อง");
+                };
                 
-                let autoFields = []; if(geojson.features.length > 0) { for(let key in geojson.features[0].properties) { if(key !== 'layer_name') autoFields.push({name: key, type: 'Text'}); } }
-                await fetch('/api/layers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: layerName, color: '#3b82f6', type: geojson.features[0].geometry.type === 'Point' ? 'Point' : 'Line', fields: autoFields }) });
-                
-                for(let f of geojson.features) { await fetch('/api/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ layer_name: layerName, properties: f.properties, geojson: f.geometry }) }); }
-                alert("นำเข้าข้อมูลสำเร็จ!"); window.saveMapStateAndReload();
-            } catch (err) { alert("Error: " + err.message); window.hideLoading(); event.target.value = ''; }
-        };
+                reader.readAsArrayBuffer(file);
 
-        window.addFieldRow = function(name = '', type = 'Text', options = []) {
-            const c = document.getElementById('fields_container');
-            const rowId = 'field_row_' + Math.random().toString(36).substr(2, 9);
-            const optionsStr = Array.isArray(options) ? options.join(', ') : (options || '');
-            const hideOptions = type !== 'Dropdown' ? 'hidden' : '';
-            
-            const rowHtml = `
-            <div id="${rowId}" class="field-row flex flex-col gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <div class="flex gap-2 items-center w-full">
-                    <input type="text" placeholder="ชื่อฟิลด์" value="${name}" required class="field-name w-1/2 border rounded px-2 py-1.5 text-xs outline-none focus:border-emerald-500">
-                    <select class="field-type w-1/2 border rounded px-2 py-1.5 text-xs bg-white focus:border-emerald-500" onchange="window.toggleDropdownInput('${rowId}')">
-                        <option value="Text" ${type === 'Text' ? 'selected' : ''}>ข้อความ</option>
-                        <option value="Number" ${type === 'Number' ? 'selected' : ''}>ตัวเลข</option>
-                        <option value="Date" ${type === 'Date' ? 'selected' : ''}>วันที่</option>
-                        <option value="Dropdown" ${type === 'Dropdown' ? 'selected' : ''}>ตัวเลือก (Dropdown) 🔽</option>
-                    </select>
-                    <button type="button" onclick="document.getElementById('${rowId}').remove()" class="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition"><i class="fa-solid fa-trash pointer-events-none"></i></button>
-                </div>
-                <div class="field-options-container w-full ${hideOptions}">
-                    <input type="text" placeholder="พิมพ์ตัวเลือกคั่นด้วยลูกน้ำ เช่น ไฟฟ้า,ประปา,ถนน" value="${optionsStr}" class="field-options w-full border border-emerald-300 bg-emerald-50 rounded px-2 py-1.5 text-xs outline-none focus:border-emerald-500">
-                    <p class="text-[9px] text-slate-500 mt-1"><i class="fa-solid fa-circle-info"></i> คั่นแต่ละตัวเลือกด้วยลูกน้ำ (,)</p>
-                </div>
-            </div>`;
-            
-            c.insertAdjacentHTML('beforeend', rowHtml);
-        };
-
-        window.toggleDropdownInput = function(rowId) {
-            const row = document.getElementById(rowId);
-            const typeSelect = row.querySelector('.field-type').value;
-            const optionsContainer = row.querySelector('.field-options-container');
-            if (typeSelect === 'Dropdown') {
-                optionsContainer.classList.remove('hidden');
-            } else {
-                optionsContainer.classList.add('hidden');
+            } catch (globalError) {
+                alert("ล้มเหลว: " + globalError.message);
+                loading.classList.add('hidden');
             }
-        };
-        
-        window.openAddLayerModal = function() { 
-            document.getElementById('modalTitle').innerHTML = "สร้างชั้นข้อมูลใหม่"; 
-            document.getElementById('new_layer_name').value = ''; 
-            document.getElementById('edit_layer_name_old').value = ''; 
-            document.getElementById('fields_container').innerHTML = ''; 
-            window.addFieldRow('ชื่อ'); 
-            window.addFieldRow('รายละเอียด'); 
-            document.getElementById('btnDeleteLayer').classList.add('hidden'); 
-            window.toggleModal('layerModal'); 
-        };
+        }
 
-        window.openEditModal = function(name) { 
-            const l = appLayers.find(layer => layer.name === name); 
-            if(!l) { alert('ไม่พบข้อมูล'); return; } 
-            
-            document.getElementById('modalTitle').innerHTML = "แก้ไขชั้นข้อมูล"; 
-            document.getElementById('new_layer_name').value = l.name; 
-            document.getElementById('edit_layer_name_old').value = l.name; 
-            document.getElementById('new_layer_color').value = l.color; 
-            document.getElementById('new_layer_type').value = l.type; 
-            
-            document.getElementById('fields_container').innerHTML = ''; 
-            l.fields.forEach(f => window.addFieldRow(f.name, f.type, f.options)); 
-            
-            document.getElementById('btnDeleteLayer').classList.remove('hidden'); 
-            window.toggleModal('layerModal'); 
-        };
-
-        window.deleteCurrentLayer = async function(name) { if (confirm(`ลบชั้นข้อมูล "${name}" และพิกัดทั้งหมดในนี้ถาวร?`)) { window.showLoading('กำลังลบชั้นข้อมูล...'); await fetch(`/api/layers/${encodeURIComponent(name)}`, { method: 'DELETE' }); window.saveMapStateAndReload(); } };
-        window.exportGeoJSON = function() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ type: "FeatureCollection", features: allFeatures })); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "Maechan_SmartCity_Data.geojson"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); };
-        
-        window.fetchLayers();
+        // 4. ส่งข้อมูลชุดที่คลีนแล้วเข้า Route API ของ Flask
+        function sendDataToBackend(geoJsonData) {
+            fetch('/api/features', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(geoJsonData)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    console.log("บันทึกข้อมูลเรียบร้อยแล้ว: " + data.count + " ฟีเจอร์");
+                } else {
+                    alert("เซิร์ฟเวอร์ปฏิเสธการบันทึก: " + data.message);
+                }
+            })
+            .catch(error => {
+                console.error("Error network:", error);
+                alert("ไม่สามารถติดต่อเซิร์ฟเวอร์หลังบ้านได้");
+            });
+        }
     </script>
 </body>
-
-
 </html>
-
